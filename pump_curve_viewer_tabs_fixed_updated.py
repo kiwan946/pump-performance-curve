@@ -84,17 +84,36 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False):
         fig1 = plot_points(filtered_df, model_col, x_col, y_col, selected_models) if point_only else \
                plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title(), linestyle='dot' if catalog_style else None)
 
-        if sheet_name == "AI 분석":
-            reference_df = pd.read_excel(uploaded_file, sheet_name="reference data")
-            reference_df = reference_df[[model_col, x_col, y_col]].dropna()
-            for model in selected_models:
-                ref_model_df = reference_df[reference_df[model_col] == model].sort_values(by=x_col)
-                fig1.add_trace(go.Scatter(
-                    x=ref_model_df[x_col], y=ref_model_df[y_col],
-                    mode='lines+markers', name=f"{model} (Reference)",
-                    line=dict(dash='dot')))
+if sheet_name == "AI 분석":
+    reference_df = pd.read_excel(uploaded_file, sheet_name="reference data")
+    reference_df = reference_df[[model_col, x_col, y_col]].dropna()
 
-        st.plotly_chart(fig1, use_container_width=True)
+    for model in selected_models:
+        model_df = filtered_df[filtered_df[model_col] == model]
+        x = model_df[x_col].values.reshape(-1, 1)
+        y = model_df[y_col].values.reshape(-1, 1)
+
+        # 다항 회귀 분석 (2차항)
+        poly = PolynomialFeatures(degree=2)
+        x_poly = poly.fit_transform(x)
+        model_poly = LinearRegression()
+        model_poly.fit(x_poly, y)
+
+        # 예측용 x 범위 생성 및 예측
+        x_range = np.linspace(x.min(), x.max(), 100).reshape(-1, 1)
+        x_range_poly = poly.transform(x_range)
+        y_pred = model_poly.predict(x_range_poly)
+
+        fig1.add_trace(go.Scatter(
+            x=x_range.flatten(), y=y_pred.flatten(),
+            mode='lines', name=f"{model} (예측)", line=dict(color='blue', width=2)))
+
+        # Reference 데이터 추가 (점선)
+        ref_model_df = reference_df[reference_df[model_col] == model].sort_values(by=x_col)
+        fig1.add_trace(go.Scatter(
+            x=ref_model_df[x_col], y=ref_model_df[y_col],
+            mode='lines+markers', name=f"{model} (Reference)",
+            line=dict(dash='dot', color='gray'))))
 
         if y2_col:
             st.markdown("#### Q-축동력 성능곡선")
