@@ -8,6 +8,13 @@ st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 # 파일 업로드
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
 
+def get_best_match_column(df, possible_names):
+    for name in possible_names:
+        for col in df.columns:
+            if name in col:
+                return col
+    return None
+
 if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
 
@@ -26,16 +33,25 @@ if uploaded_file:
                           hovermode='closest', height=600)
         st.plotly_chart(fig, use_container_width=True)
 
-    def process_and_plot(sheet_name, model_col, x_col, y_col, x_label, y_label, y2_col=None, convert_columns=None):
+    def process_and_plot(sheet_name):
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
-        if convert_columns:
-            df = df.rename(columns=convert_columns)
-        df['Series'] = df[model_col].str.extract(r"(XRF\d+)")
+
+        model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
+        x_col = get_best_match_column(df, ["토출량", "유량"])
+        y_col = get_best_match_column(df, ["토출양정", "전양정"])
+        y2_col = get_best_match_column(df, ["축동력"])
+
+        if not model_col or not x_col or not y_col:
+            st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
+            return
+
+        df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
         series_list = df['Series'].dropna().unique().tolist()
         selected_series = st.multiselect("시리즈 선택", series_list, default=series_list)
         filtered_df = df[df['Series'].isin(selected_series)]
         models = filtered_df[model_col].dropna().unique().tolist()
         selected_models = st.multiselect("모델 선택", models, default=models[:5])
+
         st.dataframe(filtered_df, use_container_width=True, height=300)
         if selected_models:
             plot_curves(filtered_df, model_col, x_col, y_col, selected_models, y2_col)
@@ -43,68 +59,40 @@ if uploaded_file:
     # Reference 탭
     with tabs[1]:
         st.subheader("📘 Reference Data")
-        process_and_plot(
-            sheet_name="reference data",
-            model_col="모델",
-            x_col="토출량",
-            y_col="토출양정",
-            x_label="Capacity",
-            y_label="Total Head",
-            y2_col="축동력"
-        )
+        process_and_plot("reference data")
 
     # Catalog 탭
     with tabs[2]:
         st.subheader("📙 Catalog Data")
-        process_and_plot(
-            sheet_name="catalog data",
-            model_col="모델명",
-            x_col="유량",
-            y_col="토출양정&전양정",
-            x_label="Capacity",
-            y_label="Total Head",
-            y2_col="축동력",
-            convert_columns={"유량": "토출량", "토출양정&전양정": "토출양정"}
-        )
+        process_and_plot("catalog data")
 
     # Deviation 탭
     with tabs[3]:
         st.subheader("📕 Deviation Data")
-        process_and_plot(
-            sheet_name="deviation data",
-            model_col="모델명",
-            x_col="유량",
-            y_col="토출양정",
-            x_label="Capacity",
-            y_label="Total Head",
-            y2_col="축동력",
-            convert_columns={"유량": "토출량"}
-        )
+        process_and_plot("deviation data")
 
-    # Total 탭 (Series 무관하게 전체 비교)
+    # Total 탭
     with tabs[0]:
         st.subheader("📗 Total Comparison View")
         ref_df = pd.read_excel(uploaded_file, sheet_name="reference data")
         cat_df = pd.read_excel(uploaded_file, sheet_name="catalog data")
         dev_df = pd.read_excel(uploaded_file, sheet_name="deviation data")
 
-        cat_df = cat_df.rename(columns={"유량": "토출량", "토출양정&전양정": "토출양정"})
-        dev_df = dev_df.rename(columns={"유량": "토출량"})
-
-        if "모델" in ref_df.columns:
-            ref_df = ref_df.rename(columns={"모델": "Model"})
-        if "모델명" in cat_df.columns:
-            cat_df = cat_df.rename(columns={"모델명": "Model"})
-        if "모델명" in dev_df.columns:
-            dev_df = dev_df.rename(columns={"모델명": "Model"})
+        ref_df = ref_df.rename(columns={get_best_match_column(ref_df, ["모델"]): "Model"})
+        cat_df = cat_df.rename(columns={get_best_match_column(cat_df, ["모델명"]): "Model",
+                                        get_best_match_column(cat_df, ["유량"]): "토출량",
+                                        get_best_match_column(cat_df, ["토출양정", "전양정"]): "토출양정"})
+        dev_df = dev_df.rename(columns={get_best_match_column(dev_df, ["모델명"]): "Model",
+                                        get_best_match_column(dev_df, ["유량"]): "토출량",
+                                        get_best_match_column(dev_df, ["토출양정"]): "토출양정"})
 
         ref_df['source'] = 'Reference'
         cat_df['source'] = 'Catalog'
         dev_df['source'] = 'Deviation'
 
-        ref_df['Series'] = ref_df['Model'].str.extract(r"(XRF\d+)")
-        cat_df['Series'] = cat_df['Model'].str.extract(r"(XRF\d+)")
-        dev_df['Series'] = dev_df['Model'].str.extract(r"(XRF\d+)")
+        ref_df['Series'] = ref_df['Model'].astype(str).str.extract(r"(XRF\d+)")
+        cat_df['Series'] = cat_df['Model'].astype(str).str.extract(r"(XRF\d+)")
+        dev_df['Series'] = dev_df['Model'].astype(str).str.extract(r"(XRF\d+)")
 
         combined = pd.concat([
             ref_df[['Model', 'Series', '토출량', '토출양정', '축동력', 'source']],
