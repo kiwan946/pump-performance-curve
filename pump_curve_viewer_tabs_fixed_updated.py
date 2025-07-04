@@ -109,8 +109,70 @@ if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
     tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
 
-    with tabs[0]:
-        st.subheader("📊 Total - 통합 곡선 분석")
+with tabs[0]:
+    st.subheader("📊 Total - 통합 곡선 분석")
+
+    sheet_configs = [
+        ("reference data", "Reference", False, False),
+        ("catalog data", "Catalog", False, True),
+        ("deviation data", "Deviation", True, False),
+    ]
+
+    all_dfs = []
+    for sheet_name, source, point_only, catalog_style in sheet_configs:
+        df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+        df["출처"] = source
+        all_dfs.append(df)
+
+    total_df = pd.concat(all_dfs, ignore_index=True)
+
+    model_col = get_best_match_column(total_df, ["모델", "모델명", "Model"])
+    x_col = get_best_match_column(total_df, ["토출량", "유량"])
+    y_col = get_best_match_column(total_df, ["토출양정", "전양정"])
+    y2_col = get_best_match_column(total_df, ["축동력"])
+
+    if not model_col or not x_col or not y_col:
+        st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
+    else:
+        total_df['Series'] = total_df[model_col].astype(str).str.extract(r"(XRF\d+)")
+
+        col_filter1, col_filter2 = st.columns([1, 3])
+        with col_filter1:
+            mode = st.selectbox("Total - 분류 기준", ["시리즈별", "모델별"], key="total_mode")
+
+        if mode == "시리즈별":
+            options = total_df['Series'].dropna().unique().tolist()
+            with col_filter2:
+                selected = st.multiselect("Total - 시리즈 선택", options, default=options, key="total_series")
+            filtered_df = total_df[total_df['Series'].isin(selected)]
+        else:
+            options = total_df[model_col].dropna().unique().tolist()
+            with col_filter2:
+                selected = st.multiselect("Total - 모델 선택", options, default=options[:5], key="total_models")
+            filtered_df = total_df[total_df[model_col].isin(selected)]
+
+        selected_models = filtered_df[model_col].dropna().unique().tolist()
+
+        if selected_models:
+            st.markdown("#### Q-H (토출양정) 통합 성능곡선")
+            fig1 = go.Figure()
+            for source in filtered_df["출처"].unique():
+                df_by_source = filtered_df[filtered_df["출처"] == source]
+                style = dict(dash='dot') if source == "Catalog" else dict()
+                fig1 = fig1 + plot_lines(df_by_source, model_col, x_col, y_col, selected_models, source, style.get("dash"))
+            st.plotly_chart(fig1, use_container_width=True)
+
+            if y2_col:
+                st.markdown("#### Q-축동력 통합 성능곡선")
+                fig2 = go.Figure()
+                for source in filtered_df["출처"].unique():
+                    df_by_source = filtered_df[filtered_df["출처"] == source]
+                    style = dict(dash='dot') if source == "Catalog" else dict()
+                    fig2 = fig2 + plot_lines(df_by_source, model_col, x_col, y2_col, selected_models, source, style.get("dash"))
+                st.plotly_chart(fig2, use_container_width=True)
+
+        st.markdown("#### 데이터 테이블")
+        st.dataframe(filtered_df, use_container_width=True, height=300)
 
     with tabs[1]:
         st.subheader("📘 Reference Data")
