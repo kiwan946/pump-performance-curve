@@ -20,20 +20,27 @@ if uploaded_file:
 
     tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation"])
 
-    def plot_curves(df, model_col, x_col, y_col, selected_models, y2_col=None):
+    def plot_lines(df, model_col, x_col, y_col, selected_models):
         fig = go.Figure()
         for model in selected_models:
             model_df = df[df[model_col] == model].sort_values(by=x_col)
             fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y_col],
                                      mode='lines+markers', name=f"{model} - {y_col}"))
-            if y2_col and y2_col in model_df.columns:
-                fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y2_col],
-                                         mode='lines+markers', name=f"{model} - {y2_col}"))
         fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
                           hovermode='closest', height=600)
         st.plotly_chart(fig, use_container_width=True)
 
-    def process_and_plot(sheet_name):
+    def plot_points(df, model_col, x_col, y_col, selected_models):
+        fig = go.Figure()
+        for model in selected_models:
+            model_df = df[df[model_col] == model]
+            fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y_col],
+                                     mode='markers', name=f"{model} - {y_col}"))
+        fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
+                          hovermode='closest', height=600)
+        st.plotly_chart(fig, use_container_width=True)
+
+    def process_and_plot(sheet_name, point_only=False):
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
 
         model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
@@ -47,14 +54,21 @@ if uploaded_file:
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
         series_list = df['Series'].dropna().unique().tolist()
-        selected_series = st.multiselect("시리즈 선택", series_list, default=series_list)
+        selected_series = st.multiselect(f"{sheet_name}_시리즈 선택", series_list, default=series_list, key=sheet_name+'_series')
         filtered_df = df[df['Series'].isin(selected_series)]
         models = filtered_df[model_col].dropna().unique().tolist()
-        selected_models = st.multiselect("모델 선택", models, default=models[:5])
+        selected_models = st.multiselect(f"{sheet_name}_모델 선택", models, default=models[:5], key=sheet_name+'_models')
 
         st.dataframe(filtered_df, use_container_width=True, height=300)
         if selected_models:
-            plot_curves(filtered_df, model_col, x_col, y_col, selected_models, y2_col)
+            if point_only:
+                plot_points(filtered_df, model_col, x_col, y_col, selected_models)
+                if y2_col:
+                    plot_points(filtered_df, model_col, x_col, y2_col, selected_models)
+            else:
+                plot_lines(filtered_df, model_col, x_col, y_col, selected_models)
+                if y2_col:
+                    plot_lines(filtered_df, model_col, x_col, y2_col, selected_models)
 
     # Reference 탭
     with tabs[1]:
@@ -69,7 +83,7 @@ if uploaded_file:
     # Deviation 탭
     with tabs[3]:
         st.subheader("📕 Deviation Data")
-        process_and_plot("deviation data")
+        process_and_plot("deviation data", point_only=True)
 
     # Total 탭
     with tabs[0]:
@@ -90,9 +104,8 @@ if uploaded_file:
         cat_df['source'] = 'Catalog'
         dev_df['source'] = 'Deviation'
 
-        ref_df['Series'] = ref_df['Model'].astype(str).str.extract(r"(XRF\d+)")
-        cat_df['Series'] = cat_df['Model'].astype(str).str.extract(r"(XRF\d+)")
-        dev_df['Series'] = dev_df['Model'].astype(str).str.extract(r"(XRF\d+)")
+        for df in [ref_df, cat_df, dev_df]:
+            df['Series'] = df['Model'].astype(str).str.extract(r"(XRF\d+)")
 
         combined = pd.concat([
             ref_df[['Model', 'Series', '토출량', '토출양정', '축동력', 'source']],
@@ -101,27 +114,27 @@ if uploaded_file:
         ], ignore_index=True)
 
         series_list = combined['Series'].dropna().unique().tolist()
-        selected_series = st.multiselect("시리즈 선택", series_list, default=series_list)
+        selected_series = st.multiselect("total_시리즈 선택", series_list, default=series_list)
         combined = combined[combined['Series'].isin(selected_series)]
 
         models = combined['Model'].dropna().unique().tolist()
-        selected_models = st.multiselect("모델 선택", models, default=models[:5])
+        selected_models = st.multiselect("total_모델 선택", models, default=models[:5])
         sources = st.multiselect("데이터 종류 선택", ['Reference', 'Catalog', 'Deviation'], default=['Reference'])
 
         df_filtered = combined[(combined['Model'].isin(selected_models)) &
                                (combined['source'].isin(sources))]
 
         st.dataframe(df_filtered, use_container_width=True, height=300)
+
         if not df_filtered.empty:
-            fig = go.Figure()
-            for model in selected_models:
-                for src in sources:
-                    temp = df_filtered[(df_filtered['Model'] == model) & (df_filtered['source'] == src)]
-                    fig.add_trace(go.Scatter(x=temp['토출량'], y=temp['토출양정'],
-                                             mode='lines+markers', name=f"{model} ({src}) - Total Head"))
-                    if '축동력' in temp.columns:
-                        fig.add_trace(go.Scatter(x=temp['토출량'], y=temp['축동력'],
-                                                 mode='lines+markers', name=f"{model} ({src}) - 축동력"))
-            fig.update_layout(xaxis_title="Capacity", yaxis_title="Total Head / 축동력",
-                              hovermode='closest', height=600)
-            st.plotly_chart(fig, use_container_width=True)
+            for y_col in ['토출양정', '축동력']:
+                fig = go.Figure()
+                for model in selected_models:
+                    for src in sources:
+                        temp = df_filtered[(df_filtered['Model'] == model) & (df_filtered['source'] == src)]
+                        mode = 'markers' if src == 'Deviation' else 'lines+markers'
+                        fig.add_trace(go.Scatter(x=temp['토출량'], y=temp[y_col],
+                                                 mode=mode, name=f"{model} ({src}) - {y_col}"))
+                fig.update_layout(xaxis_title="Capacity", yaxis_title=y_col,
+                                  hovermode='closest', height=600)
+                st.plotly_chart(fig, use_container_width=True)
