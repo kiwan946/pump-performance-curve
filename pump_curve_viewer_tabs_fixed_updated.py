@@ -165,3 +165,4 @@ if uploaded_file:
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("AI 분석을 위한 필수 컬럼이 부족합니다.")
+
