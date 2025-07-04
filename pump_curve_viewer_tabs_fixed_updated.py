@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objs as go
 import numpy as np
+from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
 st.set_page_config(page_title="Dooch XRL(F) 성능 곡선 뷰어", layout="wide")
@@ -82,6 +83,17 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False):
         st.markdown("#### Q-H (토출양정) 성능곡선")
         fig1 = plot_points(filtered_df, model_col, x_col, y_col, selected_models) if point_only else \
                plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title(), linestyle='dot' if catalog_style else None)
+
+        if sheet_name == "AI 분석":
+            reference_df = pd.read_excel(uploaded_file, sheet_name="reference data")
+            reference_df = reference_df[[model_col, x_col, y_col]].dropna()
+            for model in selected_models:
+                ref_model_df = reference_df[reference_df[model_col] == model].sort_values(by=x_col)
+                fig1.add_trace(go.Scatter(
+                    x=ref_model_df[x_col], y=ref_model_df[y_col],
+                    mode='lines+markers', name=f"{model} (Reference)",
+                    line=dict(dash='dot')))
+
         st.plotly_chart(fig1, use_container_width=True)
 
         if y2_col:
@@ -122,12 +134,34 @@ if uploaded_file:
         if model_col and x_col and y_col:
             df = df[[model_col, x_col, y_col]].dropna()
             model = st.selectbox("모델 선택", df[model_col].unique())
-            user_input = st.slider("토출량 입력", float(df[x_col].min()), float(df[x_col].max()), float(df[x_col].mean()))
             model_df = df[df[model_col] == model]
-            X = model_df[[x_col]]
-            y = model_df[y_col]
-            reg = LinearRegression().fit(X, y)
-            prediction = reg.predict([[user_input]])[0]
+            X = model_df[[x_col]].values
+            y = model_df[y_col].values
+
+            degree = st.slider("다항 회귀 차수 선택", 2, 5, 2)
+            poly = PolynomialFeatures(degree)
+            X_poly = poly.fit_transform(X)
+
+            reg = LinearRegression().fit(X_poly, y)
+
+            user_input = st.slider("토출량 입력", float(X.min()), float(X.max()), float(X.mean()))
+            prediction = reg.predict(poly.transform([[user_input]]))[0]
             st.success(f"예측된 양정(H): {prediction:.2f} @ Q={user_input}")
+
+            x_range = np.linspace(X.min(), X.max(), 300).reshape(-1, 1)
+            y_pred = reg.predict(poly.transform(x_range))
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y_col], mode='markers', name='실측값'))
+            fig.add_trace(go.Scatter(x=x_range.flatten(), y=y_pred, mode='lines', name='회귀곡선'))
+            fig.add_trace(go.Scatter(x=[user_input], y=[prediction], mode='markers+text', name='예측값',
+                                     text=[f"Q={user_input}, H={prediction:.2f}"], textposition='top center'))
+
+            ref_df = df[df[model_col] == model].sort_values(by=x_col)
+            fig.add_trace(go.Scatter(x=ref_df[x_col], y=ref_df[y_col], mode='lines+markers',
+                                     name='Reference', line=dict(dash='dot')))
+
+            fig.update_layout(title="AI 기반 예측 곡선", xaxis_title=x_col, yaxis_title=y_col)
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("AI 분석을 위한 필수 컬럼이 부족합니다.")
