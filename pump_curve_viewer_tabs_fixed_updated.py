@@ -5,7 +5,6 @@ import plotly.graph_objs as go
 st.set_page_config(page_title="Dooch XRL(F) 성능 곡선 뷰어", layout="wide")
 st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 
-# 파일 업로드
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
 
 def get_best_match_column(df, possible_names):
@@ -60,11 +59,19 @@ if uploaded_file:
             return
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
-        series_list = df['Series'].dropna().unique().tolist()
-        selected_series = st.multiselect(f"{sheet_name}_시리즈 선택", series_list, default=series_list, key=sheet_name+'_series')
-        filtered_df = df[df['Series'].isin(selected_series)]
-        models = filtered_df[model_col].dropna().unique().tolist()
-        selected_models = st.multiselect(f"{sheet_name}_모델 선택", models, default=models[:5], key=sheet_name+'_models')
+
+        mode = st.selectbox(f"{sheet_name}_분류 기준 선택", ["시리즈별", "모델별"], key=sheet_name+"_mode")
+
+        if mode == "시리즈별":
+            options = df['Series'].dropna().unique().tolist()
+            selected = st.multiselect(f"{sheet_name}_시리즈 선택", options, default=options, key=sheet_name+'_series')
+            filtered_df = df[df['Series'].isin(selected)]
+        else:
+            options = df[model_col].dropna().unique().tolist()
+            selected = st.multiselect(f"{sheet_name}_모델 선택", options, default=options[:5], key=sheet_name+'_models')
+            filtered_df = df[df[model_col].isin(selected)]
+
+        selected_models = filtered_df[model_col].dropna().unique().tolist()
 
         if selected_models:
             if point_only:
@@ -72,9 +79,9 @@ if uploaded_file:
                 if y2_col:
                     plot_points(filtered_df, model_col, x_col, y2_col, selected_models)
             else:
-                plot_lines(filtered_df, model_col, x_col, y_col, selected_models)
+                plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title())
                 if y2_col:
-                    plot_lines(filtered_df, model_col, x_col, y2_col, selected_models)
+                    plot_lines(filtered_df, model_col, x_col, y2_col, selected_models, source=sheet_name.title())
 
         st.dataframe(filtered_df, use_container_width=True, height=300)
 
@@ -93,55 +100,4 @@ if uploaded_file:
         st.subheader("📕 Deviation Data")
         process_and_plot("deviation data", point_only=True)
 
-    # Total 탭
-    with tabs[0]:
-        st.subheader("📗 Total Comparison View")
-        ref_df = pd.read_excel(uploaded_file, sheet_name="reference data")
-        cat_df = pd.read_excel(uploaded_file, sheet_name="catalog data")
-        dev_df = pd.read_excel(uploaded_file, sheet_name="deviation data")
-
-        ref_df = ref_df.rename(columns={get_best_match_column(ref_df, ["모델"]): "Model"})
-        cat_df = cat_df.rename(columns={get_best_match_column(cat_df, ["모델명"]): "Model",
-                                        get_best_match_column(cat_df, ["유량"]): "토출량",
-                                        get_best_match_column(cat_df, ["토출양정", "전양정"]): "토출양정"})
-        dev_df = dev_df.rename(columns={get_best_match_column(dev_df, ["모델명"]): "Model",
-                                        get_best_match_column(dev_df, ["유량"]): "토출량",
-                                        get_best_match_column(dev_df, ["토출양정"]): "토출양정"})
-
-        for df in [ref_df, cat_df, dev_df]:
-            df['축동력'] = df['축동력'] if '축동력' in df.columns else None
-            df['source'] = df.equals(ref_df) and 'Reference' or df.equals(cat_df) and 'Catalog' or 'Deviation'
-            df['Series'] = df['Model'].astype(str).str.extract(r"(XRF\d+)")
-
-        combined = pd.concat([ref_df, cat_df, dev_df], ignore_index=True)
-
-        series_list = combined['Series'].dropna().unique().tolist()
-        selected_series = st.multiselect("total_시리즈 선택", series_list, default=series_list)
-        combined = combined[combined['Series'].isin(selected_series)]
-
-        models = combined['Model'].dropna().unique().tolist()
-        selected_models = st.multiselect("total_모델 선택", models, default=models[:5])
-        sources = st.multiselect("데이터 종류 선택", ['Reference', 'Catalog', 'Deviation'], default=['Reference'])
-
-        df_filtered = combined[(combined['Model'].isin(selected_models)) &
-                               (combined['source'].isin(sources))]
-
-        if not df_filtered.empty:
-            for y_col in ['토출양정', '축동력']:
-                fig = go.Figure()
-                for model in selected_models:
-                    for src in sources:
-                        temp = df_filtered[(df_filtered['Model'] == model) & (df_filtered['source'] == src)]
-                        mode = 'markers' if src == 'Deviation' else 'lines+markers'
-                        line_style = dict(dash='dot') if src == 'Catalog' else dict()
-                        fig.add_trace(go.Scatter(
-                            x=temp['토출량'], y=temp[y_col], mode=mode,
-                            name=f"{model} ({src})",
-                            line=line_style,
-                            text=[f"Model: {model}<br>Q: {q}<br>{y_col}: {h}" for q, h in zip(temp['토출량'], temp[y_col])],
-                            hoverinfo='text'))
-                fig.update_layout(xaxis_title="Capacity", yaxis_title=y_col,
-                                  hovermode='closest', height=600)
-                st.plotly_chart(fig, use_container_width=True)
-
-        st.dataframe(df_filtered, use_container_width=True, height=300)
+    # Total 탭은 이후 확장 가능
