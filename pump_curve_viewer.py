@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objs as go
 
-st.set_page_config(page_title="펌프 성능 곡선 뷰어 (인터랙티브 완성형)", layout="wide")
-st.title("📊 펌프 성능 곡선 뷰어 (인터랙티브 완성형)")
+st.set_page_config(page_title="Dooch XRL(F) 성능 곡선 뷰어", layout="wide")
+st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 
 # 파일 업로드
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
@@ -112,3 +112,4 @@ if uploaded_file:
             fig.update_layout(xaxis_title="Capacity", yaxis_title="Total Head",
                               hovermode='closest', height=600)
             st.plotly_chart(fig, use_container_width=True)
+
