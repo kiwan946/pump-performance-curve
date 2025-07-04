@@ -64,15 +64,19 @@ if uploaded_file:
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
 
-        mode = st.selectbox(f"{sheet_name} - 분류 기준", ["시리즈별", "모델별"], key=sheet_name+"_mode")
+        col_filter1, col_filter2 = st.columns([1, 3])
+        with col_filter1:
+            mode = st.selectbox(f"{sheet_name} - 분류 기준", ["시리즈별", "모델별"], key=sheet_name+"_mode")
 
         if mode == "시리즈별":
             options = df['Series'].dropna().unique().tolist()
-            selected = st.multiselect(f"{sheet_name} - 시리즈 선택", options, default=options, key=sheet_name+'_series')
+            with col_filter2:
+                selected = st.multiselect(f"{sheet_name} - 시리즈 선택", options, default=options, key=sheet_name+'_series')
             filtered_df = df[df['Series'].isin(selected)]
         else:
             options = df[model_col].dropna().unique().tolist()
-            selected = st.multiselect(f"{sheet_name} - 모델 선택", options, default=options[:5], key=sheet_name+'_models')
+            with col_filter2:
+                selected = st.multiselect(f"{sheet_name} - 모델 선택", options, default=options[:5], key=sheet_name+'_models')
             filtered_df = df[df[model_col].isin(selected)]
 
         selected_models = filtered_df[model_col].dropna().unique().tolist()
