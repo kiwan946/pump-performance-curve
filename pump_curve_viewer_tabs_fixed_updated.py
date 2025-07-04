@@ -108,18 +108,12 @@ if uploaded_file:
                                         get_best_match_column(dev_df, ["유량"]): "토출량",
                                         get_best_match_column(dev_df, ["토출양정"]): "토출양정"})
 
-        ref_df['source'] = 'Reference'
-        cat_df['source'] = 'Catalog'
-        dev_df['source'] = 'Deviation'
-
         for df in [ref_df, cat_df, dev_df]:
+            df['축동력'] = df['축동력'] if '축동력' in df.columns else None
+            df['source'] = df.equals(ref_df) and 'Reference' or df.equals(cat_df) and 'Catalog' or 'Deviation'
             df['Series'] = df['Model'].astype(str).str.extract(r"(XRF\d+)")
 
-        combined = pd.concat([
-            ref_df[['Model', 'Series', '토출량', '토출양정', '축동력', 'source']],
-            cat_df[['Model', 'Series', '토출량', '토출양정', '축동력', 'source']],
-            dev_df[['Model', 'Series', '토출량', '토출양정', '축동력', 'source']]
-        ], ignore_index=True)
+        combined = pd.concat([ref_df, cat_df, dev_df], ignore_index=True)
 
         series_list = combined['Series'].dropna().unique().tolist()
         selected_series = st.multiselect("total_시리즈 선택", series_list, default=series_list)
@@ -144,7 +138,7 @@ if uploaded_file:
                             x=temp['토출량'], y=temp[y_col], mode=mode,
                             name=f"{model} ({src})",
                             line=line_style,
-                            text=[f"Model: {model}<br>Q: {q}<br>H: {h}" for q, h in zip(temp['토출량'], temp[y_col])],
+                            text=[f"Model: {model}<br>Q: {q}<br>{y_col}: {h}" for q, h in zip(temp['토출량'], temp[y_col])],
                             hoverinfo='text'))
                 fig.update_layout(xaxis_title="Capacity", yaxis_title=y_col,
                                   hovermode='closest', height=600)
