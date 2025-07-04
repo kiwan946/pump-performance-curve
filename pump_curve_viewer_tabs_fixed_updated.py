@@ -1,123 +1,129 @@
-
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.graph_objs as go
 
-st.set_page_config(layout="wide")
-st.title("📊 펌프 성능 곡선 뷰어 (인터랙티브 완성형)")
+st.set_page_config(page_title="Dooch XRL(F) 성능 곡선 뷰어", layout="wide")
+st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 
+# 파일 업로드
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
 
 if uploaded_file:
-    try:
-        sheets = pd.read_excel(uploaded_file, sheet_name=None)
-        ref_df = sheets.get("reference data")
-        cat_df = sheets.get("catalog data")
-        dev_df = sheets.get("deviation data")
+    xls = pd.ExcelFile(uploaded_file)
 
-        def clean_df(df):
-            df.columns = df.columns.str.strip()
-            df = df.rename(columns={
-                "토출양정": "Total Head",
-                "전양정": "Total Head",  # fallback
-                "토출량": "Capacity",
-                "모델": "Model"
-            })
-            df["Series"] = df["Model"].str.extract(r"(XRF\d+)", expand=False)
-            return df
+    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation"])
 
-        ref_df = clean_df(ref_df) if ref_df is not None else pd.DataFrame()
-        cat_df = clean_df(cat_df) if cat_df is not None else pd.DataFrame()
-        dev_df = clean_df(dev_df) if dev_df is not None else pd.DataFrame()
+    def plot_curves(df, model_col, x_col, y_col, selected_models):
+        fig = go.Figure()
+        for model in selected_models:
+            model_df = df[df[model_col] == model].sort_values(by=x_col)
+            fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y_col],
+                                     mode='lines+markers', name=str(model)))
+        fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
+                          hovermode='closest', height=600)
+        st.plotly_chart(fig, use_container_width=True)
 
-        tab1, tab2, tab3, tab4 = st.tabs(["📊 Total", "📋 Reference", "📘 Catalog", "📐 Deviation"])
+    def process_and_plot(sheet_name, model_col, x_col, y_col, x_label, y_label, convert_columns=None):
+        df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+        if convert_columns:
+            df = df.rename(columns=convert_columns)
+        df['Series'] = df[model_col].str.extract(r"(XRF\d+)")
+        series_list = df['Series'].dropna().unique().tolist()
+        selected_series = st.multiselect("시리즈 선택", series_list, default=series_list)
+        filtered_df = df[df['Series'].isin(selected_series)]
+        models = filtered_df[model_col].dropna().unique().tolist()
+        selected_models = st.multiselect("모델 선택", models, default=models[:5])
+        st.dataframe(filtered_df, use_container_width=True, height=300)
+        if selected_models:
+            plot_curves(filtered_df, model_col, x_col, y_col, selected_models)
 
-        # ===== Reference Tab =====
-        with tab2:
-            st.subheader("📈 성능 곡선 시각화 (시리즈별)")
-            selected_series = st.multiselect(
-                "표시할 시리즈 선택",
-                options=sorted(ref_df["Series"].dropna().unique()),
-                default=sorted(ref_df["Series"].dropna().unique())
-            )
+    # Reference 탭
+    with tabs[1]:
+        st.subheader("📘 Reference Data")
+        process_and_plot(
+            sheet_name="reference data",
+            model_col="모델",
+            x_col="토출량",
+            y_col="토출양정",
+            x_label="Capacity",
+            y_label="Total Head"
+        )
 
-            x_line = st.number_input("수직 보조선 (Capacity)", value=0.0, step=10.0)
-            y_line = st.number_input("수평 보조선 (Head)", value=0.0, step=5.0)
+    # Catalog 탭
+    with tabs[2]:
+        st.subheader("📙 Catalog Data")
+        process_and_plot(
+            sheet_name="catalog data",
+            model_col="모델명",
+            x_col="유량",
+            y_col="토출양정&전양정",
+            x_label="Capacity",
+            y_label="Total Head",
+            convert_columns={"유량": "토출량", "토출양정&전양정": "토출양정"}
+        )
 
-            fig_ref = go.Figure()
-            for model in ref_df["Model"].unique():
-                subset = ref_df[ref_df["Model"] == model]
-                if subset.empty or subset["Series"].iloc[0] not in selected_series:
-                    continue
-                fig_ref.add_trace(go.Scatter(
-                    x=subset["Capacity"],
-                    y=subset["Total Head"],
-                    mode="lines+markers+text",
-                    name=model,
-                    text=[model] + [""] * (len(subset) - 1),
-                    textposition="top left"
-                ))
-            if x_line > 0:
-                fig_ref.add_vline(x=x_line, line_width=2, line_dash="dash", line_color="red")
-            if y_line > 0:
-                fig_ref.add_hline(y=y_line, line_width=2, line_dash="dash", line_color="blue")
-            fig_ref.update_layout(
-                xaxis_title="Capacity (L/min)", yaxis_title="Total Head (m)",
-                height=900, width=1500, hovermode="closest", showlegend=True
-            )
-            fig_ref.update_xaxes(showgrid=True)
-            fig_ref.update_yaxes(showgrid=True)
-            st.plotly_chart(fig_ref, use_container_width=True)
+    # Deviation 탭
+    with tabs[3]:
+        st.subheader("📕 Deviation Data")
+        process_and_plot(
+            sheet_name="deviation data",
+            model_col="모델명",
+            x_col="유량",
+            y_col="토출양정",
+            x_label="Capacity",
+            y_label="Total Head",
+            convert_columns={"유량": "토출량"}
+        )
 
-            st.subheader("📝 백데이터 편집")
-            st.data_editor(ref_df, num_rows="dynamic")
+    # Total 탭 (Series 무관하게 전체 비교)
+    with tabs[0]:
+        st.subheader("📗 Total Comparison View")
+        ref_df = pd.read_excel(uploaded_file, sheet_name="reference data")
+        cat_df = pd.read_excel(uploaded_file, sheet_name="catalog data")
+        dev_df = pd.read_excel(uploaded_file, sheet_name="deviation data")
 
-        # ===== Total Tab =====
-        with tab1:
-            st.subheader("📊 성능 곡선 시각화 (모델별 + 데이터 선택)")
-            show_ref = st.checkbox("📘 Reference", value=True)
-            show_cat = st.checkbox("📘 Catalog")
-            show_dev = st.checkbox("📘 Deviation")
+        cat_df = cat_df.rename(columns={"유량": "토출량", "토출양정&전양정": "토출양정"})
+        dev_df = dev_df.rename(columns={"유량": "토출량"})
 
-            all_models = pd.concat([ref_df, cat_df, dev_df], ignore_index=True)["Model"].unique()
-            selected_models = st.multiselect("표시할 모델 선택", options=sorted(all_models), default=sorted(all_models))
+        if "모델" in ref_df.columns:
+            ref_df = ref_df.rename(columns={"모델": "Model"})
+        if "모델명" in cat_df.columns:
+            cat_df = cat_df.rename(columns={"모델명": "Model"})
+        if "모델명" in dev_df.columns:
+            dev_df = dev_df.rename(columns={"모델명": "Model"})
 
-            fig_total = go.Figure()
-            sources = [("Reference", ref_df, show_ref), ("Catalog", cat_df, show_cat), ("Deviation", dev_df, show_dev)]
+        ref_df['source'] = 'Reference'
+        cat_df['source'] = 'Catalog'
+        dev_df['source'] = 'Deviation'
 
-            for label, df_src, show in sources:
-                if not show or df_src.empty:
-                    continue
-                for model in df_src["Model"].unique():
-                    if model not in selected_models:
-                        continue
-                    subset = df_src[df_src["Model"] == model]
-                    if subset.empty:
-                        continue
-                    fig_total.add_trace(go.Scatter(
-                        x=subset["Capacity"],
-                        y=subset["Total Head"],
-                        mode="lines+markers",
-                        name=f"{model} ({label})"
-                    ))
+        ref_df['Series'] = ref_df['Model'].str.extract(r"(XRF\d+)")
+        cat_df['Series'] = cat_df['Model'].str.extract(r"(XRF\d+)")
+        dev_df['Series'] = dev_df['Model'].str.extract(r"(XRF\d+)")
 
-            fig_total.update_layout(
-                xaxis_title="Capacity (L/min)", yaxis_title="Total Head (m)",
-                height=900, width=1500, hovermode="closest", showlegend=True
-            )
-            fig_total.update_xaxes(showgrid=True)
-            fig_total.update_yaxes(showgrid=True)
-            st.plotly_chart(fig_total, use_container_width=True)
+        combined = pd.concat([ref_df[['Model', 'Series', '토출량', '토출양정', 'source']],
+                              cat_df[['Model', 'Series', '토출량', '토출양정', 'source']],
+                              dev_df[['Model', 'Series', '토출량', '토출양정', 'source']]],
+                             ignore_index=True)
 
-        # ===== Catalog Tab =====
-        with tab3:
-            st.subheader("📘 Catalog Data (시리즈별)")
-            st.dataframe(cat_df)
+        series_list = combined['Series'].dropna().unique().tolist()
+        selected_series = st.multiselect("시리즈 선택", series_list, default=series_list)
+        combined = combined[combined['Series'].isin(selected_series)]
 
-        # ===== Deviation Tab =====
-        with tab4:
-            st.subheader("📐 Deviation Data (시리즈별)")
-            st.dataframe(dev_df)
+        models = combined['Model'].dropna().unique().tolist()
+        selected_models = st.multiselect("모델 선택", models, default=models[:5])
+        sources = st.multiselect("데이터 종류 선택", ['Reference', 'Catalog', 'Deviation'], default=['Reference'])
 
-    except Exception as e:
-        st.error(f"오류 발생: {e}")
+        df_filtered = combined[(combined['Model'].isin(selected_models)) &
+                               (combined['source'].isin(sources))]
+
+        st.dataframe(df_filtered, use_container_width=True, height=300)
+        if not df_filtered.empty:
+            fig = go.Figure()
+            for model in selected_models:
+                for src in sources:
+                    temp = df_filtered[(df_filtered['Model'] == model) & (df_filtered['source'] == src)]
+                    fig.add_trace(go.Scatter(x=temp['토출량'], y=temp['토출양정'],
+                                             mode='lines+markers', name=f"{model} ({src})"))
+            fig.update_layout(xaxis_title="Capacity", yaxis_title="Total Head",
+                              hovermode='closest', height=600)
+            st.plotly_chart(fig, use_container_width=True)
