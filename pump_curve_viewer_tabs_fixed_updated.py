@@ -20,12 +20,16 @@ if uploaded_file:
 
     tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation"])
 
-    def plot_lines(df, model_col, x_col, y_col, selected_models):
+    def plot_lines(df, model_col, x_col, y_col, selected_models, source=None):
         fig = go.Figure()
         for model in selected_models:
             model_df = df[df[model_col] == model].sort_values(by=x_col)
-            fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y_col],
-                                     mode='lines+markers', name=f"{model} - {y_col}"))
+            line_style = dict(dash='dot') if source == 'Catalog' else dict()
+            fig.add_trace(go.Scatter(
+                x=model_df[x_col], y=model_df[y_col], mode='lines+markers',
+                name=f"{model}", line=line_style,
+                text=[f"Model: {model}<br>Q: {q}<br>H: {h}" for q, h in zip(model_df[x_col], model_df[y_col])],
+                hoverinfo='text'))
         fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
                           hovermode='closest', height=600)
         st.plotly_chart(fig, use_container_width=True)
@@ -34,8 +38,11 @@ if uploaded_file:
         fig = go.Figure()
         for model in selected_models:
             model_df = df[df[model_col] == model]
-            fig.add_trace(go.Scatter(x=model_df[x_col], y=model_df[y_col],
-                                     mode='markers', name=f"{model} - {y_col}"))
+            fig.add_trace(go.Scatter(
+                x=model_df[x_col], y=model_df[y_col], mode='markers',
+                name=f"{model}",
+                text=[f"Model: {model}<br>Q: {q}<br>H: {h}" for q, h in zip(model_df[x_col], model_df[y_col])],
+                hoverinfo='text'))
         fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
                           hovermode='closest', height=600)
         st.plotly_chart(fig, use_container_width=True)
@@ -59,7 +66,6 @@ if uploaded_file:
         models = filtered_df[model_col].dropna().unique().tolist()
         selected_models = st.multiselect(f"{sheet_name}_모델 선택", models, default=models[:5], key=sheet_name+'_models')
 
-        st.dataframe(filtered_df, use_container_width=True, height=300)
         if selected_models:
             if point_only:
                 plot_points(filtered_df, model_col, x_col, y_col, selected_models)
@@ -69,6 +75,8 @@ if uploaded_file:
                 plot_lines(filtered_df, model_col, x_col, y_col, selected_models)
                 if y2_col:
                     plot_lines(filtered_df, model_col, x_col, y2_col, selected_models)
+
+        st.dataframe(filtered_df, use_container_width=True, height=300)
 
     # Reference 탭
     with tabs[1]:
@@ -124,8 +132,6 @@ if uploaded_file:
         df_filtered = combined[(combined['Model'].isin(selected_models)) &
                                (combined['source'].isin(sources))]
 
-        st.dataframe(df_filtered, use_container_width=True, height=300)
-
         if not df_filtered.empty:
             for y_col in ['토출양정', '축동력']:
                 fig = go.Figure()
@@ -133,8 +139,15 @@ if uploaded_file:
                     for src in sources:
                         temp = df_filtered[(df_filtered['Model'] == model) & (df_filtered['source'] == src)]
                         mode = 'markers' if src == 'Deviation' else 'lines+markers'
-                        fig.add_trace(go.Scatter(x=temp['토출량'], y=temp[y_col],
-                                                 mode=mode, name=f"{model} ({src}) - {y_col}"))
+                        line_style = dict(dash='dot') if src == 'Catalog' else dict()
+                        fig.add_trace(go.Scatter(
+                            x=temp['토출량'], y=temp[y_col], mode=mode,
+                            name=f"{model} ({src})",
+                            line=line_style,
+                            text=[f"Model: {model}<br>Q: {q}<br>H: {h}" for q, h in zip(temp['토출량'], temp[y_col])],
+                            hoverinfo='text'))
                 fig.update_layout(xaxis_title="Capacity", yaxis_title=y_col,
                                   hovermode='closest', height=600)
                 st.plotly_chart(fig, use_container_width=True)
+
+        st.dataframe(df_filtered, use_container_width=True, height=300)
