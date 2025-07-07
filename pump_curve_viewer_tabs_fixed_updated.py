@@ -67,10 +67,11 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
 
+        unique_id = str(uuid.uuid4())
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
-            selected_series = st.selectbox(f"{sheet_name} - 시리즈 선택", [""] + series_options, key=f"{sheet_name}_series")
+            selected_series = st.selectbox(f"{sheet_name} - 시리즈 선택", [""] + series_options, key=f"{sheet_name}_series_{unique_id}")
         if selected_series:
             model_options = df[df['Series'] == selected_series][model_col].dropna().unique().tolist()
         else:
@@ -78,9 +79,9 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
 
         with col2:
             if sheet_name == "reference data" or total_mode:
-                selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models")
+                selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models_{unique_id}")
             else:
-                selected_models = [st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model")]
+                selected_models = [st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model_{unique_id}")]
 
         filtered_df = df[df[model_col].isin(selected_models)] if selected_models else pd.DataFrame()
     else:
@@ -96,7 +97,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             for sheet, label, dash_style in zip([
                 "catalog data", "deviation data"
             ], ["Catalog", "Deviation"], ["dash", "dot"]):
-                show = st.checkbox(f"{label} 데이터 표시", value=False, key=f"{sheet}_show")
+                show = st.checkbox(f"{label} 데이터 표시", value=False, key=f"{sheet}_show_{unique_id}")
                 if show:
                     try:
                         extra_df = pd.read_excel(uploaded_file, sheet_name=sheet)
@@ -129,6 +130,7 @@ if uploaded_file:
 
     with tabs[0]:
         st.subheader("📊 Total - 통합 곡선 분석")
+        st.info("Reference 데이터를 기반으로 분석합니다.")
         process_and_plot("reference data", total_mode=True)
 
     with tabs[1]:
@@ -146,4 +148,3 @@ if uploaded_file:
     with tabs[4]:
         st.subheader("🤖 AI 성능 예측")
         process_and_plot("reference data", ai_mode=True)
-
