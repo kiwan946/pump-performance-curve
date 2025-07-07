@@ -62,7 +62,11 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
         name=f"{model} 예측곡선", line=dict(dash='dash', color='gray')))
 
 def process_and_plot(sheet_name, point_only=False, catalog_style=False):
-    df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+    try:
+        df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+    except Exception as e:
+        st.error(f"'{sheet_name}' 시트를 불러올 수 없습니다: {e}")
+        return
 
     model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
     x_col = get_best_match_column(df, ["토출량", "유량"])
@@ -100,17 +104,20 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False):
                plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title(), linestyle='dot' if catalog_style else None)
 
         if sheet_name == "AI 분석":
-            reference_df = pd.read_excel(uploaded_file, sheet_name="reference data")
-            reference_df = reference_df[[model_col, x_col, y_col]].dropna()
-            for model in selected_models:
-                ref_model_df = reference_df[reference_df[model_col] == model].sort_values(by=x_col)
-                fig1.add_trace(go.Scatter(
-                    x=ref_model_df[x_col], y=ref_model_df[y_col],
-                    mode='lines+markers', name=f"{model} (Reference)",
-                    line=dict(dash='dot')))
+            try:
+                reference_df = pd.read_excel(uploaded_file, sheet_name="reference data")
+                reference_df = reference_df[[model_col, x_col, y_col]].dropna()
+                for model in selected_models:
+                    ref_model_df = reference_df[reference_df[model_col] == model].sort_values(by=x_col)
+                    fig1.add_trace(go.Scatter(
+                        x=ref_model_df[x_col], y=ref_model_df[y_col],
+                        mode='lines+markers', name=f"{model} (Reference)",
+                        line=dict(dash='dot')))
 
-                model_df = filtered_df[filtered_df[model_col] == model].sort_values(by=x_col)
-                add_polynomial_fit(fig1, model_df, x_col, y_col, model)
+                    model_df = filtered_df[filtered_df[model_col] == model].sort_values(by=x_col)
+                    add_polynomial_fit(fig1, model_df, x_col, y_col, model)
+            except:
+                st.warning("Reference Data 시트를 불러오거나 처리하는 데 실패했습니다.")
 
         st.plotly_chart(fig1, use_container_width=True)
 
@@ -125,27 +132,26 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False):
 
 if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
-    tabs = st.tabs(["Reference", "Catalog", "Deviation", "AI 분석", "Total"])
+    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
 
     with tabs[0]:
-        st.subheader("📘 Reference Data")
-        process_and_plot("reference data")
-
-    with tabs[1]:
-        st.subheader("📙 Catalog Data")
-        process_and_plot("catalog data", catalog_style=True)
-
-    with tabs[2]:
-        st.subheader("📕 Deviation Data")
-        process_and_plot("deviation data", point_only=True)
-
-    with tabs[3]:
-        st.subheader("🤖 AI 성능 예측")
-        process_and_plot("AI 분석")
-
-    with tabs[4]:
         st.subheader("📊 Total - 통합 곡선 분석")
         for sheet in ["reference data", "catalog data", "deviation data"]:
             st.markdown(f"### {sheet.title()}")
             process_and_plot(sheet)
 
+    with tabs[1]:
+        st.subheader("📘 Reference Data")
+        process_and_plot("reference data")
+
+    with tabs[2]:
+        st.subheader("📙 Catalog Data")
+        process_and_plot("catalog data", catalog_style=True)
+
+    with tabs[3]:
+        st.subheader("📕 Deviation Data")
+        process_and_plot("deviation data", point_only=True)
+
+    with tabs[4]:
+        st.subheader("🤖 AI 성능 예측")
+        process_and_plot("AI 분석")
