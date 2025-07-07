@@ -19,14 +19,15 @@ def get_best_match_column(df, possible_names):
 
 def plot_lines(df, model_col, x_col, y_col, selected_models, source=None, linestyle=None):
     fig = go.Figure()
-    for model in selected_models:
+    for idx, model in enumerate(selected_models):
         model_df = df[df[model_col] == model].sort_values(by=x_col)
         line_style = dict(dash=linestyle) if linestyle else dict()
         label = model.replace("-토출양정", "").replace("-축동력", "")
+        text_labels = [label if i == len(model_df)-1 else "" for i in range(len(model_df))]
         fig.add_trace(go.Scatter(
             x=model_df[x_col], y=model_df[y_col], mode='lines+markers+text',
             name=label, line=line_style,
-            text=[label for _ in range(len(model_df))], textposition='top center',
+            text=text_labels, textposition='middle right',
             hoverinfo='text',
             hovertext=[f"Model: {label}<br>Q: {q}<br>H: {h}" for q, h in zip(model_df[x_col], model_df[y_col])]))
     fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
@@ -64,12 +65,20 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
             return
 
-        df['Series'] = df[model_col].astype(str).str.extract(r"(XR[^\s\-]+)")
+        df['Series'] = df[model_col].astype(str).str.extract(r"(XR\\d+)")
+
+        if total_mode:
+            custom_order = [
+                "XRF3", "XRF5", "XRF10", "XRF15", "XRF20", "XRF32", "XRF45",
+                "XRF64", "XRF95", "XRF125", "XRF155", "XRF185", "XRF215", "XRF255"
+            ]
+            series_options = [s for s in custom_order if s in df['Series'].dropna().unique()]
+        else:
+            series_options = sorted(df['Series'].dropna().unique().tolist())
 
         unique_key = tab_id.replace(" ", "_").lower()
         col1, col2 = st.columns([1, 3])
         with col1:
-            series_options = sorted(df['Series'].dropna().unique().tolist())
             selected_series = st.multiselect("시리즈 선택 (다중 선택 가능)", options=series_options, key=f"series_{unique_key}")
 
         if selected_series:
