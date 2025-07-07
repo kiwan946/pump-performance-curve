@@ -4,6 +4,7 @@ import plotly.graph_objs as go
 import numpy as np
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
+import uuid
 
 st.set_page_config(page_title="Dooch XRL(F) 성능 곡선 뷰어", layout="wide")
 st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
@@ -66,7 +67,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XR[\w\-]+)")
 
-        unique_id = f"{sheet_name.replace(' ', '_')}_{str(hash(sheet_name))}"
+        unique_id = str(uuid.uuid4())
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
