@@ -4,7 +4,6 @@ import plotly.graph_objs as go
 import numpy as np
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
-import uuid
 
 st.set_page_config(page_title="Dooch XRL(F) 성능 곡선 뷰어", layout="wide")
 st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
@@ -46,7 +45,7 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
         x=x_range.flatten(), y=y_pred, mode='lines',
         name=f"{model} 예측곡선", line=dict(dash='solid', color='gray')))
 
-def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False, total_mode=False):
+def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False, total_mode=False, tab_id="default"):
     df = None
     try:
         df = pd.read_excel(uploaded_file, sheet_name="reference data")
@@ -67,11 +66,11 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XR[\w\-]+)")
 
-        unique_id = str(uuid.uuid4())
+        unique_key = tab_id.replace(" ", "_").lower()
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
-            selected_series = st.multiselect("시리즈 선택 (다중 선택 가능)", options=series_options, key=f"series_{unique_id}")
+            selected_series = st.multiselect("시리즈 선택 (다중 선택 가능)", options=series_options, key=f"series_{unique_key}")
 
         if selected_series:
             model_options = df[df['Series'].isin(selected_series)][model_col].dropna().unique().tolist()
@@ -79,7 +78,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             model_options = []
 
         with col2:
-            selected_models = st.multiselect("모델 선택 (다중 선택 가능)", options=model_options, key=f"models_{unique_id}")
+            selected_models = st.multiselect("모델 선택 (다중 선택 가능)", options=model_options, key=f"models_{unique_key}")
 
         filtered_df = df[df[model_col].isin(selected_models)] if selected_models else pd.DataFrame()
     else:
@@ -95,7 +94,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             for sheet, label, dash_style in zip([
                 "catalog data", "deviation data"
             ], ["Catalog", "Deviation"], ["dash", "dot"]):
-                show = st.checkbox(f"{label} 데이터 표시", value=False, key=f"{sheet}_show_{unique_id}")
+                show = st.checkbox(f"{label} 데이터 표시", value=False, key=f"{sheet}_show_{unique_key}")
                 if show:
                     try:
                         extra_df = pd.read_excel(uploaded_file, sheet_name=sheet)
@@ -129,21 +128,20 @@ if uploaded_file:
     with tabs[0]:
         st.subheader("📊 Total - 통합 곡선 분석")
         st.info("Reference 데이터를 기반으로 분석합니다.")
-        process_and_plot("reference data", total_mode=True)
+        process_and_plot("reference data", total_mode=True, tab_id="total")
 
     with tabs[1]:
         st.subheader("📘 Reference Data")
-        process_and_plot("reference data")
+        process_and_plot("reference data", tab_id="reference")
 
     with tabs[2]:
         st.subheader("📙 Catalog Data")
-        process_and_plot("catalog data", catalog_style=True)
+        process_and_plot("catalog data", catalog_style=True, tab_id="catalog")
 
     with tabs[3]:
         st.subheader("📕 Deviation Data")
-        process_and_plot("deviation data", point_only=True)
+        process_and_plot("deviation data", point_only=True, tab_id="deviation")
 
     with tabs[4]:
         st.subheader("🤖 AI 성능 예측")
-        process_and_plot("reference data", ai_mode=True)
-
+        process_and_plot("reference data", ai_mode=True, tab_id="ai")
