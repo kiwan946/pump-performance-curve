@@ -71,7 +71,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
-            selected_series = st.multiselect(f"{sheet_name} - 시리즈 선택 (다중 선택 가능)", series_options, key=f"{unique_id}_series")
+            selected_series = st.multiselect("시리즈 선택 (다중 선택 가능)", options=series_options, key=f"series_{unique_id}")
 
         if selected_series:
             model_options = df[df['Series'].isin(selected_series)][model_col].dropna().unique().tolist()
@@ -79,7 +79,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             model_options = []
 
         with col2:
-            selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{unique_id}_models")
+            selected_models = st.multiselect("모델 선택 (다중 선택 가능)", options=model_options, key=f"models_{unique_id}")
 
         filtered_df = df[df[model_col].isin(selected_models)] if selected_models else pd.DataFrame()
     else:
@@ -146,3 +146,4 @@ if uploaded_file:
     with tabs[4]:
         st.subheader("🤖 AI 성능 예측")
         process_and_plot("reference data", ai_mode=True)
+
