@@ -77,17 +77,20 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             model_options = []
 
         with col2:
-            selected_model = st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model")
+            if sheet_name == "reference data" and not ai_mode:
+                selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models")
+            else:
+                selected_models = [st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model")]
 
-        filtered_df = df[df[model_col] == selected_model] if selected_model else pd.DataFrame()
+        filtered_df = df[df[model_col].isin(selected_models)] if selected_models else pd.DataFrame()
     else:
-        selected_model = ""
+        selected_models = []
         model_col = x_col = y_col = y2_col = None
         filtered_df = pd.DataFrame()
 
     if not filtered_df.empty:
         st.markdown("#### Q-H (토출양정) 성능곡선")
-        fig1 = plot_lines(filtered_df, model_col, x_col, y_col, [selected_model], source=sheet_name.title())
+        fig1 = plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title())
 
         if sheet_name == "reference data" and not ai_mode:
             for sheet, label, dash_style in zip([
@@ -98,7 +101,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
                     try:
                         extra_df = pd.read_excel(uploaded_file, sheet_name=sheet)
                         extra_df = extra_df[[model_col, x_col, y_col]].dropna()
-                        model_df = extra_df[extra_df[model_col] == selected_model].sort_values(by=x_col)
+                        model_df = extra_df[extra_df[model_col].isin(selected_models)].sort_values(by=x_col)
                         fig1.add_trace(go.Scatter(
                             x=model_df[x_col], y=model_df[y_col],
                             mode='lines+markers', name=f"{label}",
@@ -106,40 +109,44 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
                     except:
                         st.warning(f"{label} 데이터를 불러오지 못했습니다.")
 
-            add_polynomial_fit(fig1, filtered_df, x_col, y_col, selected_model)
+            for model in selected_models:
+                model_df = filtered_df[filtered_df[model_col] == model]
+                add_polynomial_fit(fig1, model_df, x_col, y_col, model)
 
         if ai_mode:
-            add_polynomial_fit(fig1, filtered_df, x_col, y_col, selected_model)
+            for model in selected_models:
+                model_df = filtered_df[filtered_df[model_col] == model]
+                add_polynomial_fit(fig1, model_df, x_col, y_col, model)
 
         st.plotly_chart(fig1, use_container_width=True)
 
         if y2_col:
             st.markdown("#### Q-축동력 성능곡선")
-            fig2 = plot_lines(filtered_df, model_col, x_col, y2_col, [selected_model], source=sheet_name.title())
+            fig2 = plot_lines(filtered_df, model_col, x_col, y2_col, selected_models, source=sheet_name.title())
             st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("#### 데이터 테이블")
         st.dataframe(filtered_df, use_container_width=True, height=300)
 
 if uploaded_file:
-    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
+    tabs = st.tabs(["Reference", "Catalog", "Deviation", "AI 분석", "Total"])
 
     with tabs[0]:
-        st.subheader("📊 Total - 통합 곡선 분석")
-        process_and_plot("reference data")
-
-    with tabs[1]:
         st.subheader("📘 Reference Data")
         process_and_plot("reference data")
 
-    with tabs[2]:
+    with tabs[1]:
         st.subheader("📙 Catalog Data")
         process_and_plot("catalog data", catalog_style=True)
 
-    with tabs[3]:
+    with tabs[2]:
         st.subheader("📕 Deviation Data")
         process_and_plot("deviation data", point_only=True)
 
-    with tabs[4]:
+    with tabs[3]:
         st.subheader("🤖 AI 성능 예측")
         process_and_plot("reference data", ai_mode=True)
+
+    with tabs[4]:
+        st.subheader("📊 Total - 통합 곡선 분석")
+        process_and_plot("reference data")
