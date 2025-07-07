@@ -1,4 +1,4 @@
-import streamlit as st
+""import streamlit as st
 import pandas as pd
 import plotly.graph_objs as go
 import numpy as np
@@ -65,7 +65,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
             return
 
-        df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
+        df['Series'] = df[model_col].astype(str).str.extract(r"(XR[A-Z]*\d+)")
 
         unique_id = str(uuid.uuid4())
         col1, col2 = st.columns([1, 3])
