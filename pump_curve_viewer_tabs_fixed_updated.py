@@ -11,14 +11,12 @@ st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
 
-
 def get_best_match_column(df, possible_names):
     for name in possible_names:
         for col in df.columns:
             if name in col:
                 return col
     return None
-
 
 def plot_lines(df, model_col, x_col, y_col, selected_models, source=None, linestyle=None):
     fig = go.Figure()
@@ -36,7 +34,6 @@ def plot_lines(df, model_col, x_col, y_col, selected_models, source=None, linest
                       hovermode='closest', height=600, showlegend=True)
     return fig
 
-
 def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
     X = model_df[[x_col]].values
     y = model_df[y_col].values
@@ -49,16 +46,14 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
         x=x_range.flatten(), y=y_pred, mode='lines',
         name=f"{model} 예측곡선", line=dict(dash='solid', color='gray')))
 
-
 def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False):
     df = None
     try:
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
     except:
-        if ai_mode or sheet_name == "Total":
-            st.warning(f"'{sheet_name}' 시트를 불러올 수 없습니다. 곡선 예측만 표시됩니다.")
-        else:
-            return
+        if ai_mode:
+            st.warning("Reference 데이터를 불러올 수 없습니다. AI 분석을 실행할 수 없습니다.")
+        return
 
     if df is not None:
         model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
@@ -94,20 +89,22 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
         st.markdown("#### Q-H (토출양정) 성능곡선")
         fig1 = plot_lines(filtered_df, model_col, x_col, y_col, [selected_model], source=sheet_name.title())
 
-        if sheet_name == "Total":
-            for sheet in ["reference data", "catalog data", "deviation data"]:
-                show = st.checkbox(f"{sheet.title()} 데이터 표시", value=True, key=f"{sheet}_show")
+        if sheet_name == "reference data" and not ai_mode:
+            for sheet, label, dash_style in zip([
+                "catalog data", "deviation data"
+            ], ["Catalog", "Deviation"], ["dash", "dot"]):
+                show = st.checkbox(f"{label} 데이터 표시", value=False, key=f"{sheet}_show")
                 if show:
                     try:
-                        ref_df = pd.read_excel(uploaded_file, sheet_name=sheet)
-                        ref_df = ref_df[[model_col, x_col, y_col]].dropna()
-                        ref_model_df = ref_df[ref_df[model_col] == selected_model].sort_values(by=x_col)
+                        extra_df = pd.read_excel(uploaded_file, sheet_name=sheet)
+                        extra_df = extra_df[[model_col, x_col, y_col]].dropna()
+                        model_df = extra_df[extra_df[model_col] == selected_model].sort_values(by=x_col)
                         fig1.add_trace(go.Scatter(
-                            x=ref_model_df[x_col], y=ref_model_df[y_col],
-                            mode='lines+markers', name=f"{sheet.title()}",
-                            line=dict(dash='dot')))
+                            x=model_df[x_col], y=model_df[y_col],
+                            mode='lines+markers', name=f"{label}",
+                            line=dict(dash=dash_style)))
                     except:
-                        st.warning(f"{sheet.title()} 시트를 불러오지 못했습니다.")
+                        st.warning(f"{label} 데이터를 불러오지 못했습니다.")
 
             add_polynomial_fit(fig1, filtered_df, x_col, y_col, selected_model)
 
