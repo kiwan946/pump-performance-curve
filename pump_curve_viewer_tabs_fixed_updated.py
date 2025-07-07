@@ -51,11 +51,14 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
 
 
 def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False):
+    df = None
     try:
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
-    except Exception as e:
-        st.warning(f"'{sheet_name}' 시트를 불러올 수 없습니다. 곡선 예측만 표시됩니다.")
-        df = None
+    except:
+        if ai_mode or sheet_name == "Total":
+            st.warning(f"'{sheet_name}' 시트를 불러올 수 없습니다. 곡선 예측만 표시됩니다.")
+        else:
+            return
 
     if df is not None:
         model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
@@ -122,12 +125,11 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
         st.dataframe(filtered_df, use_container_width=True, height=300)
 
 if uploaded_file:
-    xls = pd.ExcelFile(uploaded_file)
     tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
 
     with tabs[0]:
         st.subheader("📊 Total - 통합 곡선 분석")
-        process_and_plot("Total")
+        process_and_plot("reference data")
 
     with tabs[1]:
         st.subheader("📘 Reference Data")
@@ -143,4 +145,4 @@ if uploaded_file:
 
     with tabs[4]:
         st.subheader("🤖 AI 성능 예측")
-        process_and_plot("Total", ai_mode=True)
+        process_and_plot("reference data", ai_mode=True)
