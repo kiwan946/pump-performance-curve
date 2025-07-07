@@ -59,7 +59,7 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
     y_pred = model_fit.predict(poly.transform(x_range))
     fig.add_trace(go.Scatter(
         x=x_range.flatten(), y=y_pred, mode='lines',
-        name=f"{model} 예측곡선", line=dict(dash='dash', color='gray')))
+        name=f"{model} 예측곡선", line=dict(dash='solid', color='gray')))
 
 def process_and_plot(sheet_name, point_only=False, catalog_style=False):
     try:
@@ -137,8 +137,11 @@ if uploaded_file:
     with tabs[0]:
         st.subheader("📊 Total - 통합 곡선 분석")
         for sheet in ["reference data", "catalog data", "deviation data"]:
-            st.markdown(f"### {sheet.title()}")
-            process_and_plot(sheet)
+            if sheet in xls.sheet_names:
+                st.markdown(f"### {sheet.title()}")
+                process_and_plot(sheet)
+            else:
+                st.warning(f"'{sheet}' 시트를 찾을 수 없습니다.")
 
     with tabs[1]:
         st.subheader("📘 Reference Data")
