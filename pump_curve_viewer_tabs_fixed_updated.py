@@ -66,7 +66,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XR[\w\-]+)")
 
-        unique_id = sheet_name.replace(" ", "_")
+        unique_id = f"{sheet_name.replace(' ', '_')}_{str(hash(sheet_name))}"
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
