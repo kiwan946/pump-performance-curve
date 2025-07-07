@@ -81,11 +81,11 @@ def render_filters(df, model_col, key_prefix):
     mode = st.selectbox("분류 기준", ["시리즈별", "모델별"], key=key_prefix+"_mode")
     if mode == "시리즈별":
         opts = df['Series'].dropna().unique().tolist()
-        sel = st.multiselect("시리즈 선택", opts, key=key_prefix+"_series")
+        sel = st.multiselect("시리즈 선택", opts, default=opts, key=key_prefix+"_series")
         return df[df['Series'].isin(sel)], sel
     else:
         opts = df[model_col].dropna().unique().tolist()
-        sel = st.multiselect("모델 선택", opts, key=key_prefix+"_models")
+        sel = st.multiselect("모델 선택", opts, default=opts, key=key_prefix+"_models")
         return df[df[model_col].isin(sel)], sel
 
 if uploaded_file:
@@ -124,3 +124,4 @@ if uploaded_file:
                     if y2:
                         plot_lines(df_f, mc, xc, y2, sel, source=name.title(), hline=h, vline=v)
                 st.dataframe(df_f, use_container_width=True, height=300)
+
