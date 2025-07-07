@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objs as go
 import numpy as np
+import uuid
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
@@ -75,18 +76,20 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False):
     df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
 
     col_filter1, col_filter2 = st.columns([1, 3])
+    unique_id = str(uuid.uuid4())[:8]
+
     with col_filter1:
-        mode = st.selectbox(f"{sheet_name} - 분류 기준", ["시리즈별", "모델별"], key=f"{sheet_name}_mode")
+        mode = st.selectbox(f"{sheet_name} - 분류 기준", ["시리즈별", "모델별"], key=f"{sheet_name}_mode_{unique_id}")
 
     if mode == "시리즈별":
         options = df['Series'].dropna().unique().tolist()
         with col_filter2:
-            selected = st.multiselect(f"{sheet_name} - 시리즈 선택", options, default=[], key=f"{sheet_name}_series")
+            selected = st.multiselect(f"{sheet_name} - 시리즈 선택", options, default=[], key=f"{sheet_name}_series_{unique_id}")
         filtered_df = df[df['Series'].isin(selected)]
     else:
         options = df[model_col].dropna().unique().tolist()
         with col_filter2:
-            selected = st.multiselect(f"{sheet_name} - 모델 선택", options, default=[], key=f"{sheet_name}_models")
+            selected = st.multiselect(f"{sheet_name} - 모델 선택", options, default=[], key=f"{sheet_name}_models_{unique_id}")
         filtered_df = df[df[model_col].isin(selected)]
 
     selected_models = filtered_df[model_col].dropna().unique().tolist()
@@ -122,26 +125,26 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False):
 
 if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
-    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
+    tabs = st.tabs(["Reference", "Catalog", "Deviation", "AI 분석", "Total"])
 
     with tabs[0]:
-        st.subheader("📊 Total - 통합 곡선 분석")
-        process_and_plot("reference data")
-        process_and_plot("catalog data", catalog_style=True)
-        process_and_plot("deviation data", point_only=True)
-
-    with tabs[1]:
         st.subheader("📘 Reference Data")
         process_and_plot("reference data")
 
-    with tabs[2]:
+    with tabs[1]:
         st.subheader("📙 Catalog Data")
         process_and_plot("catalog data", catalog_style=True)
 
-    with tabs[3]:
+    with tabs[2]:
         st.subheader("📕 Deviation Data")
         process_and_plot("deviation data", point_only=True)
 
-    with tabs[4]:
+    with tabs[3]:
         st.subheader("🤖 AI 성능 예측")
         process_and_plot("AI 분석")
+
+    with tabs[4]:
+        st.subheader("📊 Total - 통합 곡선 분석")
+        for sheet in ["reference data", "catalog data", "deviation data"]:
+            st.markdown(f"### {sheet.title()}")
+            process_and_plot(sheet)
