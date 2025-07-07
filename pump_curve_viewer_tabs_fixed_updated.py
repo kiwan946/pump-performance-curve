@@ -24,25 +24,23 @@ def get_best_match_column(df, possible_names):
 # 곡선 또는 점 그리기 함수
 def plot_lines(df, model_col, x_col, y_col, models, source=None, hline=None, vline=None):
     fig = go.Figure()
-    # 모델별 데이터 추가
     for m in models:
         sub = df[df[model_col] == m].sort_values(by=x_col)
         if source == 'Catalog':
             style = dict(dash='dot')
-            mode = 'lines+markers'
+            mode_type = 'lines+markers'
         elif source == 'Deviation':
             style = {}
-            mode = 'markers'
+            mode_type = 'markers'
         else:
             style = {}
-            mode = 'lines+markers'
+            mode_type = 'lines+markers'
         fig.add_trace(go.Scatter(
-            x=sub[x_col], y=sub[y_col], mode=mode,
+            x=sub[x_col], y=sub[y_col], mode=mode_type,
             name=f"{m} ({source})" if source else m,
-            line=style,
-            marker={}
+            line=style
         ))
-    # 보조선 추가 (paper 좌표 사용)
+    # 보조선 추가 (paper 좌표)
     if hline is not None:
         fig.add_shape(type="line",
                       xref="paper", x0=0, x1=1,
@@ -64,10 +62,10 @@ def load_sheet(sheet_name, show=True):
     if not show:
         return None, None, None, None, pd.DataFrame()
     df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
-    model_col = get_best_match_column(df, ["모델", "모델명", "Model"] )
-    x_col = get_best_match_column(df, ["토출량", "유량"] )
-    y_col = get_best_match_column(df, ["토출양정", "전양정"] )
-    y2_col = get_best_match_column(df, ["축동력"] )
+    model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
+    x_col = get_best_match_column(df, ["토출량", "유량"])
+    y_col = get_best_match_column(df, ["토출양정", "전양정"])
+    y2_col = get_best_match_column(df, ["축동력"])
     if not model_col or not x_col or not y_col:
         st.error(f"{sheet_name} 시트에서 필수 컬럼을 찾을 수 없습니다.")
         return None, None, None, None, pd.DataFrame()
@@ -77,6 +75,7 @@ def load_sheet(sheet_name, show=True):
     return model_col, x_col, y_col, y2_col, df
 
 # 필터 UI 및 데이터 반환
+
 def render_filters(df, model_col, key_prefix):
     mode = st.selectbox("분류 기준", ["시리즈별", "모델별"], key=key_prefix+"_mode")
     if mode == "시리즈별":
@@ -84,8 +83,13 @@ def render_filters(df, model_col, key_prefix):
         sel = st.multiselect("시리즈 선택", opts, default=opts, key=key_prefix+"_series")
         return df[df['Series'].isin(sel)], sel
     else:
-        opts = df[model_col].dropna().unique().tolist()
-        sel = st.multiselect("모델 선택", opts, default=opts, key=key_prefix+"_models")
+        all_models = df[model_col].dropna().unique().tolist()
+        search_text = st.text_input(f"모델 검색", value="", placeholder="검색어 입력", key=key_prefix+"_search")
+        if search_text:
+            filtered_opts = [m for m in all_models if search_text.lower() in m.lower()]
+        else:
+            filtered_opts = all_models
+        sel = st.multiselect("모델 선택", filtered_opts, default=filtered_opts, key=key_prefix+"_models")
         return df[df[model_col].isin(sel)], sel
 
 if uploaded_file:
@@ -103,25 +107,27 @@ if uploaded_file:
         mc_d, xd_d, yd_d, y2_d, df_d = load_sheet("deviation data", d)
 
         df_f, sel = render_filters(df_r, mc_r, "total")
-        h = st.number_input("수평선(H)", value=None, placeholder="생략")
-        v = st.number_input("수직선(Q)", value=None, placeholder="생략")
+        h = st.number_input("수평 보조선 (H)", value=None, placeholder="생략")
+        v = st.number_input("수직 보조선 (Q)", value=None, placeholder="생략")
         if sel:
-            if r: plot_lines(df_r, mc_r, xc_r, yc_r, sel, source='Reference', hline=h, vline=v)
-            if c: plot_lines(df_c, mc_c, xc_c, yc_c, sel, source='Catalog', hline=h, vline=v)
-            if d: plot_lines(df_d, mc_d, xc_c, yc_c, sel, source='Deviation', hline=h, vline=v)
+            if r:
+                plot_lines(df_r, mc_r, xc_r, yc_r, sel, source='Reference', hline=h, vline=v)
+            if c:
+                plot_lines(df_c, mc_c, xc_c, yc_c, sel, source='Catalog', hline=h, vline=v)
+            if d:
+                plot_lines(df_d, mc_d, xd_d, yd_d, sel, source='Deviation', hline=h, vline=v)
 
     # Reference, Catalog, Deviation 개별 탭
-    for idx, name in enumerate(["reference data","catalog data","deviation data"]):
+    for idx, name in enumerate(["reference data", "catalog data", "deviation data"]):
         with tabs[idx+1]:
             st.subheader(name.title())
             mc, xc, yc, y2, df = load_sheet(name)
             if df is not None:
                 df_f, sel = render_filters(df, mc, name)
-                h = st.number_input(f"{name}_H 보조선", value=None, placeholder="생략", key=name+"_h")
-                v = st.number_input(f"{name}_Q 보조선", value=None, placeholder="생략", key=name+"_v")
+                h = st.number_input(f"{name}_수평 보조선 (H)", value=None, placeholder="생략", key=name+"_h")
+                v = st.number_input(f"{name}_수직 보조선 (Q)", value=None, placeholder="생략", key=name+"_v")
                 if sel:
                     plot_lines(df_f, mc, xc, yc, sel, source=name.title(), hline=h, vline=v)
                     if y2:
                         plot_lines(df_f, mc, xc, y2, sel, source=name.title(), hline=h, vline=v)
                 st.dataframe(df_f, use_container_width=True, height=300)
-
