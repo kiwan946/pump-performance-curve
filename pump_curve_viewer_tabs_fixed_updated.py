@@ -65,25 +65,21 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
             return
 
-        df['Series'] = df[model_col].astype(str).str.extract(r"(XR[^\s\-]+)")
+        df['Series'] = df[model_col].astype(str).str.extract(r"(XR[\w\-]+)")
 
         unique_id = str(uuid.uuid4())
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
-            selected_series = st.selectbox(f"{sheet_name} - 시리즈 선택", [""] + series_options, key=f"{sheet_name}_series_{unique_id}")
+            selected_series = st.multiselect(f"{sheet_name} - 시리즈 선택 (다중 선택 가능)", series_options, key=f"{sheet_name}_series_{unique_id}")
 
         if selected_series:
-            model_options = df[df['Series'] == selected_series][model_col].dropna().unique().tolist()
+            model_options = df[df['Series'].isin(selected_series)][model_col].dropna().unique().tolist()
         else:
             model_options = []
 
         with col2:
-            if sheet_name == "reference data" or total_mode:
-                selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models_{unique_id}")
-            else:
-                selected_model = st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model_{unique_id}")
-                selected_models = [selected_model] if selected_model else []
+            selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models_{unique_id}")
 
         filtered_df = df[df[model_col].isin(selected_models)] if selected_models else pd.DataFrame()
     else:
