@@ -73,10 +73,19 @@ def add_guides(fig, hline, vline):
         fig.add_shape(type="line", xref="x", x0=vline, x1=vline, yref="paper", y0=0, y1=1,
                       line=dict(color="blue", dash="dash"))
 
-# Plot 설정 (줌/팬)
+# Plot 설정 (줌/팬 강제)
 def render_chart(fig, key):
-    fig.update_layout(dragmode='pan')
-    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True}, key=key)
+    fig.update_layout(
+        dragmode='pan',
+        xaxis=dict(fixedrange=False),
+        yaxis=dict(fixedrange=False)
+    )
+    config = {
+        'scrollZoom': True,
+        'modeBarButtonsToAdd': ['zoom2d', 'pan2d'],
+        'displaylogo': False
+    }
+    st.plotly_chart(fig, use_container_width=True, config=config, key=key)
 
 if uploaded_file:
     tabs = st.tabs(["Total","Reference","Catalog","Deviation"])
@@ -151,4 +160,3 @@ if uploaded_file:
             # 데이터 테이블
             st.markdown("#### 데이터 확인")
             st.dataframe(df_f, use_container_width=True, height=300, key=f"df_{sheet}")
-
