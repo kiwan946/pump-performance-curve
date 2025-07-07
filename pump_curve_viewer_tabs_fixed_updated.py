@@ -148,3 +148,4 @@ if uploaded_file:
         for sheet in ["reference data", "catalog data", "deviation data"]:
             st.markdown(f"### {sheet.title()}")
             process_and_plot(sheet)
+
