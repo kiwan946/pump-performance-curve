@@ -7,90 +7,68 @@ st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
 
-# 고정된 시리즈 순서
+# 고정된 시리즈 순서 정의
 SERIES_ORDER = [
     "XRF3", "XRF5", "XRF10", "XRF15", "XRF20", "XRF32",
     "XRF45", "XRF64", "XRF95", "XRF125", "XRF155", "XRF185",
     "XRF215", "XRF255"
 ]
 
-def get_best_match_column(df, possible_names):
-    for name in possible_names:
+def get_best_match_column(df, names):
+    for n in names:
         for col in df.columns:
-            if name in col:
+            if n in col:
                 return col
     return None
 
-# 곡선 또는 점 그리기 함수
-def plot_lines(df, model_col, x_col, y_col, models, source=None, hline=None, vline=None):
-    fig = go.Figure()
-    for m in models:
-        sub = df[df[model_col] == m].sort_values(by=x_col)
-        if source == 'Catalog':
-            style = dict(dash='dot')
-            mode_type = 'lines+markers'
-        elif source == 'Deviation':
-            style = {}
-            mode_type = 'markers'
-        else:
-            style = {}
-            mode_type = 'lines+markers'
-        fig.add_trace(go.Scatter(
-            x=sub[x_col], y=sub[y_col], mode=mode_type,
-            name=f"{m} ({source})" if source else m,
-            line=style
-        ))
-    # 보조선 추가 (paper 좌표)
-    if hline is not None:
-        fig.add_shape(type="line",
-                      xref="paper", x0=0, x1=1,
-                      yref="y", y0=hline, y1=hline,
-                      line=dict(color="red", dash="dash"))
-    if vline is not None:
-        fig.add_shape(type="line",
-                      xref="x", x0=vline, x1=vline,
-                      yref="paper", y0=0, y1=1,
-                      line=dict(color="blue", dash="dash"))
-    fig.update_layout(
-        xaxis_title=x_col, yaxis_title=y_col,
-        hovermode='closest', height=600
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-# 시트별 데이터 로드 및 컬럼 파싱
-def load_sheet(sheet_name, show=True):
-    if not show:
+# 데이터 불러오기 및 전처리
+def load_sheet(name, active):
+    if not active:
         return None, None, None, None, pd.DataFrame()
-    df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
-    model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
-    x_col = get_best_match_column(df, ["토출량", "유량"])
-    y_col = get_best_match_column(df, ["토출양정", "전양정"])
-    y2_col = get_best_match_column(df, ["축동력"])
-    if not model_col or not x_col or not y_col:
-        st.error(f"{sheet_name} 시트에서 필수 컬럼을 찾을 수 없습니다.")
+    df = pd.read_excel(uploaded_file, sheet_name=name)
+    mcol = get_best_match_column(df, ["모델명", "모델", "Model"])
+    xcol = get_best_match_column(df, ["토출량", "유량"])
+    ycol = get_best_match_column(df, ["토출양정", "전양정"])
+    y2col = get_best_match_column(df, ["축동력"])
+    if not mcol or not xcol or not ycol:
+        st.error(f"{name} 시트: Model/토출량/토출양정 컬럼 누락")
         return None, None, None, None, pd.DataFrame()
-    df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
+    df['Series'] = df[mcol].astype(str).str.extract(r"(XRF\d+)")
     df['Series'] = pd.Categorical(df['Series'], categories=SERIES_ORDER, ordered=True)
     df = df.sort_values('Series')
-    return model_col, x_col, y_col, y2_col, df
+    return mcol, xcol, ycol, y2col, df
 
-# 필터 UI 및 데이터 반환
-
-def render_filters(df, model_col, key_prefix):
-    mode = st.selectbox("분류 기준", ["시리즈별", "모델별"], key=key_prefix+"_mode")
+# 필터 UI
+def render_filters(df, mcol, key):
+    mode = st.selectbox("분류 기준", ["시리즈별", "모델별"], key=key+"_mode")
     if mode == "시리즈별":
-        opts = df['Series'].dropna().unique().tolist()
-        sel = st.multiselect("시리즈 선택", opts, default=opts, key=key_prefix+"_series")
+        opts = list(df['Series'].dropna().unique())
+        sel = st.multiselect("시리즈 선택", options=opts, default=opts, key=key+"_series")
         return df[df['Series'].isin(sel)], sel
     else:
-        all_models = df[model_col].dropna().unique().tolist()
-        search_text = st.text_input(f"모델 검색", value="", placeholder="검색어 입력", key=key_prefix+"_search")
-        if search_text:
-            filtered_opts = [m for m in all_models if search_text.lower() in m.lower()]
-        else:
-            filtered_opts = all_models
-        sel = st.multiselect("모델 선택", filtered_opts, default=filtered_opts, key=key_prefix+"_models")
-        return df[df[model_col].isin(sel)], sel
+        allm = list(df[mcol].dropna().unique())
+        keyword = st.text_input("모델 검색", value="", key=key+"_search")
+        filt = [m for m in allm if keyword.lower() in m.lower()] if keyword else allm
+        sel = st.multiselect("모델 선택", options=filt, default=filt, key=key+"_models")
+        return df[df[mcol].isin(sel)], sel
+
+# 플로팅 함수
+def plot_curve(df, mcol, xcol, ycol, sel, style, hlin=None, vlin=None):
+    fig = go.Figure()
+    for m in sel:
+        d = df[df[mcol]==m].sort_values(xcol)
+        fig.add_trace(go.Scatter(
+            x=d[xcol], y=d[ycol], mode=style['mode'],
+            name=m, line=style.get('line', {}), marker=style.get('marker', {})
+        ))
+    if hlin is not None:
+        fig.add_shape(type="line", xref="paper", x0=0, x1=1, yref="y", y0=hlin, y1=hlin,
+                      line=dict(color="red", dash="dash"))
+    if vlin is not None:
+        fig.add_shape(type="line", xref="x", x0=vlin, x1=vlin, yref="paper", y0=0, y1=1,
+                      line=dict(color="blue", dash="dash"))
+    fig.update_layout(xaxis_title=xcol, yaxis_title=ycol, height=600, hovermode='closest')
+    st.plotly_chart(fig, use_container_width=True)
 
 if uploaded_file:
     tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation"])
@@ -98,36 +76,40 @@ if uploaded_file:
     # Total 탭
     with tabs[0]:
         st.subheader("📊 Total - 통합 곡선 분석")
-        r = st.checkbox("Reference 표시", value=True)
-        c = st.checkbox("Catalog 표시", value=False)
-        d = st.checkbox("Deviation 표시", value=False)
+        show_r = st.checkbox("Reference 표시", value=True)
+        show_c = st.checkbox("Catalog 표시", value=False)
+        show_d = st.checkbox("Deviation 표시", value=False)
 
-        mc_r, xc_r, yc_r, y2_r, df_r = load_sheet("reference data", r)
-        mc_c, xc_c, yc_c, y2_c, df_c = load_sheet("catalog data", c)
-        mc_d, xd_d, yd_d, y2_d, df_d = load_sheet("deviation data", d)
+        mc_r, xc_r, yc_r, y2_r, df_r = load_sheet("reference data", show_r)
+        mc_c, xc_c, yc_c, y2_c, df_c = load_sheet("catalog data", show_c)
+        mc_d, xc_d, yc_d, y2_d, df_d = load_sheet("deviation data", show_d)
 
         df_f, sel = render_filters(df_r, mc_r, "total")
-        h = st.number_input("수평 보조선 (H)", value=None, placeholder="생략")
-        v = st.number_input("수직 보조선 (Q)", value=None, placeholder="생략")
+        h = st.number_input("수평 보조선(H)", value=None)
+        v = st.number_input("수직 보조선(Q)", value=None)
         if sel:
-            if r:
-                plot_lines(df_r, mc_r, xc_r, yc_r, sel, source='Reference', hline=h, vline=v)
-            if c:
-                plot_lines(df_c, mc_c, xc_c, yc_c, sel, source='Catalog', hline=h, vline=v)
-            if d:
-                plot_lines(df_d, mc_d, xd_d, yd_d, sel, source='Deviation', hline=h, vline=v)
+            if show_r:
+                plot_curve(df_r, mc_r, xc_r, yc_r, sel,
+                           style={'mode':'lines+markers', 'line':{}}, hlin=h, vlin=v)
+            if show_c:
+                plot_curve(df_c, mc_c, xc_c, yc_c, sel,
+                           style={'mode':'lines+markers','line':{'dash':'dot'}}, hlin=h, vlin=v)
+            if show_d:
+                plot_curve(df_d, mc_d, xc_d, yc_d, sel,
+                           style={'mode':'markers'}, hlin=h, vlin=v)
 
-    # Reference, Catalog, Deviation 개별 탭
-    for idx, name in enumerate(["reference data", "catalog data", "deviation data"]):
-        with tabs[idx+1]:
+    # 개별 탭
+    for i, name in enumerate(["reference data","catalog data","deviation data"]):
+        with tabs[i+1]:
             st.subheader(name.title())
-            mc, xc, yc, y2, df = load_sheet(name)
-            if df is not None:
-                df_f, sel = render_filters(df, mc, name)
-                h = st.number_input(f"{name}_수평 보조선 (H)", value=None, placeholder="생략", key=name+"_h")
-                v = st.number_input(f"{name}_수직 보조선 (Q)", value=None, placeholder="생략", key=name+"_v")
-                if sel:
-                    plot_lines(df_f, mc, xc, yc, sel, source=name.title(), hline=h, vline=v)
-                    if y2:
-                        plot_lines(df_f, mc, xc, y2, sel, source=name.title(), hline=h, vline=v)
-                st.dataframe(df_f, use_container_width=True, height=300)
+            mc, xc, yc, y2, df = load_sheet(name, True)
+            df_f, sel = render_filters(df, mc, name)
+            h = st.number_input(f"{name} 수평 보조선(H)", value=None, key=name+"_h")
+            v = st.number_input(f"{name} 수직 보조선(Q)", value=None, key=name+"_v")
+            if sel:
+                style = {'mode':'markers'} if name=="deviation data" else {'mode':'lines+markers'}
+                if name=="catalog data": style['line'] = {'dash':'dot'}
+                plot_curve(df_f, mc, xc, yc, sel, style, hlin=h, vlin=v)
+                if y2:
+                    plot_curve(df_f, mc, xc, y2, sel, style, hlin=h, vlin=v)
+            st.dataframe(df_f, use_container_width=True, height=300)
