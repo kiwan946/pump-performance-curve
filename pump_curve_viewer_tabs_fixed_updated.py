@@ -11,12 +11,14 @@ st.title("📊 Dooch XRL(F) 성능 곡선 뷰어")
 
 uploaded_file = st.file_uploader("Excel 파일 업로드 (.xlsx 또는 .xlsm)", type=["xlsx", "xlsm"])
 
+
 def get_best_match_column(df, possible_names):
     for name in possible_names:
         for col in df.columns:
             if name in col:
                 return col
     return None
+
 
 def plot_lines(df, model_col, x_col, y_col, selected_models, source=None, linestyle=None):
     fig = go.Figure()
@@ -34,20 +36,6 @@ def plot_lines(df, model_col, x_col, y_col, selected_models, source=None, linest
                       hovermode='closest', height=600, showlegend=True)
     return fig
 
-def plot_points(df, model_col, x_col, y_col, selected_models):
-    fig = go.Figure()
-    for model in selected_models:
-        model_df = df[df[model_col] == model]
-        label = model.replace("-토출양정", "").replace("-축동력", "")
-        fig.add_trace(go.Scatter(
-            x=model_df[x_col], y=model_df[y_col], mode='markers+text',
-            name=label,
-            text=[label for _ in range(len(model_df))], textposition='top center',
-            hoverinfo='text',
-            hovertext=[f"Model: {label}<br>Q: {q}<br>H: {h}" for q, h in zip(model_df[x_col], model_df[y_col])]))
-    fig.update_layout(xaxis_title=x_col, yaxis_title=y_col,
-                      hovermode='closest', height=600)
-    return fig
 
 def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
     X = model_df[[x_col]].values
@@ -61,74 +49,77 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
         x=x_range.flatten(), y=y_pred, mode='lines',
         name=f"{model} 예측곡선", line=dict(dash='solid', color='gray')))
 
-def process_and_plot(sheet_name, point_only=False, catalog_style=False):
+
+def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False):
     try:
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
     except Exception as e:
-        st.error(f"'{sheet_name}' 시트를 불러올 수 없습니다: {e}")
-        return
+        st.warning(f"'{sheet_name}' 시트를 불러올 수 없습니다. 곡선 예측만 표시됩니다.")
+        df = None
 
-    model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
-    x_col = get_best_match_column(df, ["토출량", "유량"])
-    y_col = get_best_match_column(df, ["토출양정", "전양정"])
-    y2_col = get_best_match_column(df, ["축동력"])
+    if df is not None:
+        model_col = get_best_match_column(df, ["모델", "모델명", "Model"])
+        x_col = get_best_match_column(df, ["토출량", "유량"])
+        y_col = get_best_match_column(df, ["토출양정", "전양정"])
+        y2_col = get_best_match_column(df, ["축동력"])
 
-    if not model_col or not x_col or not y_col:
-        st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
-        return
+        if not model_col or not x_col or not y_col:
+            st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
+            return
 
-    df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
+        df['Series'] = df[model_col].astype(str).str.extract(r"(XRF\d+)")
 
-    col_filter1, col_filter2 = st.columns([1, 3])
-    unique_id = str(uuid.uuid4())[:8]
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            series_options = df['Series'].dropna().unique().tolist()
+            selected_series = st.selectbox(f"{sheet_name} - 시리즈 선택", [""] + series_options, key=f"{sheet_name}_series")
+        if selected_series:
+            model_options = df[df['Series'] == selected_series][model_col].dropna().unique().tolist()
+        else:
+            model_options = []
 
-    with col_filter1:
-        mode = st.selectbox(f"{sheet_name} - 분류 기준", ["시리즈별", "모델별"], key=f"{sheet_name}_mode_{unique_id}")
+        with col2:
+            selected_model = st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model")
 
-    if mode == "시리즈별":
-        options = df['Series'].dropna().unique().tolist()
-        with col_filter2:
-            selected = st.multiselect(f"{sheet_name} - 시리즈 선택", options, default=[], key=f"{sheet_name}_series_{unique_id}")
-        filtered_df = df[df['Series'].isin(selected)]
+        filtered_df = df[df[model_col] == selected_model] if selected_model else pd.DataFrame()
     else:
-        options = df[model_col].dropna().unique().tolist()
-        with col_filter2:
-            selected = st.multiselect(f"{sheet_name} - 모델 선택", options, default=[], key=f"{sheet_name}_models_{unique_id}")
-        filtered_df = df[df[model_col].isin(selected)]
+        selected_model = ""
+        model_col = x_col = y_col = y2_col = None
+        filtered_df = pd.DataFrame()
 
-    selected_models = filtered_df[model_col].dropna().unique().tolist()
-
-    if selected_models:
+    if not filtered_df.empty:
         st.markdown("#### Q-H (토출양정) 성능곡선")
-        fig1 = plot_points(filtered_df, model_col, x_col, y_col, selected_models) if point_only else \
-               plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title(), linestyle='dot' if catalog_style else None)
+        fig1 = plot_lines(filtered_df, model_col, x_col, y_col, [selected_model], source=sheet_name.title())
 
-        if sheet_name == "AI 분석":
-            try:
-                reference_df = pd.read_excel(uploaded_file, sheet_name="reference data")
-                reference_df = reference_df[[model_col, x_col, y_col]].dropna()
-                for model in selected_models:
-                    ref_model_df = reference_df[reference_df[model_col] == model].sort_values(by=x_col)
-                    fig1.add_trace(go.Scatter(
-                        x=ref_model_df[x_col], y=ref_model_df[y_col],
-                        mode='lines+markers', name=f"{model} (Reference)",
-                        line=dict(dash='dot')))
+        if sheet_name == "Total":
+            for sheet in ["reference data", "catalog data", "deviation data"]:
+                show = st.checkbox(f"{sheet.title()} 데이터 표시", value=True, key=f"{sheet}_show")
+                if show:
+                    try:
+                        ref_df = pd.read_excel(uploaded_file, sheet_name=sheet)
+                        ref_df = ref_df[[model_col, x_col, y_col]].dropna()
+                        ref_model_df = ref_df[ref_df[model_col] == selected_model].sort_values(by=x_col)
+                        fig1.add_trace(go.Scatter(
+                            x=ref_model_df[x_col], y=ref_model_df[y_col],
+                            mode='lines+markers', name=f"{sheet.title()}",
+                            line=dict(dash='dot')))
+                    except:
+                        st.warning(f"{sheet.title()} 시트를 불러오지 못했습니다.")
 
-                    model_df = filtered_df[filtered_df[model_col] == model].sort_values(by=x_col)
-                    add_polynomial_fit(fig1, model_df, x_col, y_col, model)
-            except:
-                st.warning("Reference Data 시트를 불러오거나 처리하는 데 실패했습니다.")
+            add_polynomial_fit(fig1, filtered_df, x_col, y_col, selected_model)
+
+        if ai_mode:
+            add_polynomial_fit(fig1, filtered_df, x_col, y_col, selected_model)
 
         st.plotly_chart(fig1, use_container_width=True)
 
         if y2_col:
             st.markdown("#### Q-축동력 성능곡선")
-            fig2 = plot_points(filtered_df, model_col, x_col, y2_col, selected_models) if point_only else \
-                   plot_lines(filtered_df, model_col, x_col, y2_col, selected_models, source=sheet_name.title(), linestyle='dot' if catalog_style else None)
+            fig2 = plot_lines(filtered_df, model_col, x_col, y2_col, [selected_model], source=sheet_name.title())
             st.plotly_chart(fig2, use_container_width=True)
 
-    st.markdown("#### 데이터 테이블")
-    st.dataframe(filtered_df, use_container_width=True, height=300)
+        st.markdown("#### 데이터 테이블")
+        st.dataframe(filtered_df, use_container_width=True, height=300)
 
 if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
@@ -136,12 +127,7 @@ if uploaded_file:
 
     with tabs[0]:
         st.subheader("📊 Total - 통합 곡선 분석")
-        for sheet in ["reference data", "catalog data", "deviation data"]:
-            if sheet in xls.sheet_names:
-                st.markdown(f"### {sheet.title()}")
-                process_and_plot(sheet)
-            else:
-                st.warning(f"'{sheet}' 시트를 찾을 수 없습니다.")
+        process_and_plot("Total")
 
     with tabs[1]:
         st.subheader("📘 Reference Data")
@@ -157,4 +143,4 @@ if uploaded_file:
 
     with tabs[4]:
         st.subheader("🤖 AI 성능 예측")
-        process_and_plot("AI 분석")
+        process_and_plot("Total", ai_mode=True)
