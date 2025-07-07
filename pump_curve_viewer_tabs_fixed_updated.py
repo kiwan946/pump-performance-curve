@@ -19,7 +19,7 @@ def get_best_match_column(df, possible_names):
 if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
 
-    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
+    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation"])
 
     def plot_lines(df, model_col, x_col, y_col, selected_models, source=None, linestyle=None):
         fig = go.Figure()
