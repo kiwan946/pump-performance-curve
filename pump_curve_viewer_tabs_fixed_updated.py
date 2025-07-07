@@ -64,16 +64,17 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             st.error("필수 컬럼(Model, 토출량, 토출양정)을 찾을 수 없습니다.")
             return
 
-        df['Series'] = df[model_col].astype(str).str.extract(r"(XR[\w\-]+)")
+        df['Series'] = df[model_col].astype(str).str.extract(r"(XR[^\s\-]+)")
 
         unique_key = tab_id.replace(" ", "_").lower()
         col1, col2 = st.columns([1, 3])
         with col1:
-            series_options = df['Series'].dropna().unique().tolist()
+            series_options = sorted(df['Series'].dropna().unique().tolist())
             selected_series = st.multiselect("시리즈 선택 (다중 선택 가능)", options=series_options, key=f"series_{unique_key}")
 
         if selected_series:
-            model_options = df[df['Series'].isin(selected_series)][model_col].dropna().unique().tolist()
+            filtered_df_by_series = df[df['Series'].isin(selected_series)]
+            model_options = sorted(filtered_df_by_series[model_col].dropna().unique().tolist())
         else:
             model_options = []
 
