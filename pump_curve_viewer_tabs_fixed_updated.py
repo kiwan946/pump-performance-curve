@@ -73,6 +73,11 @@ def add_guides(fig, hline, vline):
         fig.add_shape(type="line", xref="x", x0=vline, x1=vline, yref="paper", y0=0, y1=1,
                       line=dict(color="blue", dash="dash"))
 
+# Plot 설정 (줌/팬)
+def render_chart(fig, key):
+    fig.update_layout(dragmode='pan')
+    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True}, key=key)
+
 if uploaded_file:
     tabs = st.tabs(["Total","Reference","Catalog","Deviation"])
 
@@ -107,7 +112,7 @@ if uploaded_file:
         if dev_show:
             add_traces(fig_h, df_d, m_d, q_d, h_d, models, 'markers')
         add_guides(fig_h, hh, vh)
-        st.plotly_chart(fig_h, use_container_width=True, key="total_qh")
+        render_chart(fig_h, key="total_qh")
         # Q-kW 그래프
         st.markdown("#### Q-kW (토출량-축동력)")
         fig_k = go.Figure()
@@ -118,7 +123,7 @@ if uploaded_file:
         if dev_show:
             add_traces(fig_k, df_d, m_d, q_d, k_d, models, 'markers')
         add_guides(fig_k, hk, vk)
-        st.plotly_chart(fig_k, use_container_width=True, key="total_qk")
+        render_chart(fig_k, key="total_qk")
 
     # 개별 탭들
     for idx, sheet in enumerate(["reference data","catalog data","deviation data"]):
@@ -136,13 +141,13 @@ if uploaded_file:
             mode1 = 'markers' if sheet=='deviation data' else 'lines+markers'
             style1 = dict(dash='dot') if sheet=='catalog data' else None
             add_traces(fig1, df_f, mcol, qcol, hcol, models, mode1, line_style=style1)
-            st.plotly_chart(fig1, use_container_width=True, key=f"{sheet}_qh")
+            render_chart(fig1, key=f"{sheet}_qh")
             # Q-kW
             if kcol:
                 st.markdown("#### Q-kW (토출량-축동력)")
                 fig2 = go.Figure()
                 add_traces(fig2, df_f, mcol, qcol, kcol, models, mode1, line_style=style1)
-                st.plotly_chart(fig2, use_container_width=True, key=f"{sheet}_qk")
+                render_chart(fig2, key=f"{sheet}_qk")
             # 데이터 테이블
             st.markdown("#### 데이터 확인")
             st.dataframe(df_f, use_container_width=True, height=300, key=f"df_{sheet}")
