@@ -51,7 +51,11 @@ def render_filters(df, mcol, prefix):
         opts = df[mcol].dropna().unique().tolist()
         sel = st.multiselect("모델 선택", opts, default=[], key=prefix+"_models")
         df_f = df[df[mcol].isin(sel)] if sel else pd.DataFrame()
-    models = df_f[mcol].dropna().unique().tolist()
+    # df_f empty 시 모델 리스트 빈
+    if df_f.empty or mcol not in df_f.columns:
+        models = []
+    else:
+        models = df_f[mcol].dropna().unique().tolist()
     return df_f, models
 
 # 그래프 그리기 함수
@@ -78,53 +82,52 @@ def add_guides(fig, hline, vline):
 if uploaded_file:
     tabs = st.tabs(["Total","Reference","Catalog","Deviation"])
 
-    # Total 탭
-    with tabs[0]:
+    with tabs[0]:  # Total 탭
         st.subheader("📊 Total - 통합 곡선 분석")
         # 데이터 로드
         m_r,q_r,h_r,k_r,df_r = load_sheet("reference data")
         m_c,q_c,h_c,k_c,df_c = load_sheet("catalog data")
         m_d,q_d,h_d,k_d,df_d = load_sheet("deviation data")
-        # 필터 (Reference 기준)
+        # 필터 기준 (Reference로)
         df_f, models = render_filters(df_r, m_r, "total")
-        # 표시 옵션
-        ref_show = st.checkbox("Reference 데이터 표시", value=False, key="total_ref")
-        cat_show = st.checkbox("Catalog 데이터 표시", value=False, key="total_cat")
-        dev_show = st.checkbox("Deviation 데이터 표시", value=False, key="total_dev")
+        # 체크박스
+        ref_show = st.checkbox("Reference 표시", value=False, key="total_ref")
+        cat_show = st.checkbox("Catalog 표시", value=False, key="total_cat")
+        dev_show = st.checkbox("Deviation 표시", value=False, key="total_dev")
         # 보조선 입력
-        col1,col2 = st.columns(2)
+        col1, col2 = st.columns(2)
         with col1:
             hh = st.number_input("Q-H 수평선", key="total_hh")
             vh = st.number_input("Q-H 수직선", key="total_vh")
         with col2:
             hk = st.number_input("Q-kW 수평선", key="total_hk")
             vk = st.number_input("Q-kW 수직선", key="total_vk")
-        # Q-H 곡선
+        # Q-H 그래프
         st.markdown("#### Q-H (토출량-토출양정)")
         fig_h = go.Figure()
-        if ref_show and not df_f.empty:
-            add_traces(fig_h, df_f, m_r, q_r, h_r, models, mode='lines+markers')
-        if cat_show and not df_f.empty:
-            add_traces(fig_h, df_c, m_c, q_c, h_c, models, mode='lines+markers', line_style=dict(dash='dot'))
-        if dev_show and not df_f.empty:
-            add_traces(fig_h, df_d, m_d, q_d, h_d, models, mode='markers')
+        if ref_show and models:
+            add_traces(fig_h, df_f, m_r, q_r, h_r, models, 'lines+markers')
+        if cat_show and models:
+            add_traces(fig_h, df_c, m_c, q_c, h_c, models, 'lines+markers', line_style=dict(dash='dot'))
+        if dev_show and models:
+            add_traces(fig_h, df_d, m_d, q_d, h_d, models, 'markers')
         add_guides(fig_h, hh, vh)
         st.plotly_chart(fig_h, use_container_width=True)
-        # Q-kW 곡선
+        # Q-kW 그래프
         st.markdown("#### Q-kW (토출량-축동력)")
         fig_k = go.Figure()
-        if ref_show and k_r:
-            add_traces(fig_k, df_f, m_r, q_r, k_r, models, mode='lines+markers')
-        if cat_show and k_c:
-            add_traces(fig_k, df_c, m_c, q_c, k_c, models, mode='lines+markers', line_style=dict(dash='dot'))
-        if dev_show and k_d:
-            add_traces(fig_k, df_d, m_d, q_d, k_d, models, mode='markers')
+        if ref_show and models and k_r:
+            add_traces(fig_k, df_f, m_r, q_r, k_r, models, 'lines+markers')
+        if cat_show and models and k_c:
+            add_traces(fig_k, df_c, m_c, q_c, k_c, models, 'lines+markers', line_style=dict(dash='dot'))
+        if dev_show and models and k_d:
+            add_traces(fig_k, df_d, m_d, q_d, k_d, models, 'markers')
         add_guides(fig_k, hk, vk)
         st.plotly_chart(fig_k, use_container_width=True)
 
-    # 개별 탭
-    for i, sheet in enumerate(["reference data","catalog data","deviation data"]):
-        with tabs[i+1]:
+    # 개별 탭들
+    for idx, sheet in enumerate(["reference data","catalog data","deviation data"]):
+        with tabs[idx+1]:
             st.subheader(sheet.title())
             mcol,qcol,hcol,kcol,df = load_sheet(sheet)
             df_f, models = render_filters(df, mcol, sheet)
@@ -136,15 +139,14 @@ if uploaded_file:
             fig1 = go.Figure()
             mode1 = 'markers' if sheet=='deviation data' else 'lines+markers'
             style1 = dict(dash='dot') if sheet=='catalog data' else None
-            add_traces(fig1, df_f, mcol, qcol, hcol, models, mode=mode1, line_style=style1)
+            add_traces(fig1, df_f, mcol, qcol, hcol, models, mode1, line_style=style1)
             st.plotly_chart(fig1, use_container_width=True)
             # Q-kW
             if kcol:
                 st.markdown("#### Q-kW (토출량-축동력)")
                 fig2 = go.Figure()
-                add_traces(fig2, df_f, mcol, qcol, kcol, models, mode=mode1, line_style=style1)
+                add_traces(fig2, df_f, mcol, qcol, kcol, models, mode1, line_style=style1)
                 st.plotly_chart(fig2, use_container_width=True)
             # 데이터 테이블
             st.markdown("#### 데이터 확인")
             st.dataframe(df_f, use_container_width=True, height=300)
-
