@@ -21,146 +21,122 @@ def get_best_match_column(df, names):
                 return col
     return None
 
-# 시트 데이터 로드 및 전처리
-# returns: model_col, q_col, h_col, k_col, df (or df empty if missing)
+# 시트 로드 및 전처리
 def load_sheet(sheet_name):
     try:
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
     except Exception:
         st.error(f"'{sheet_name}' 시트를 불러올 수 없습니다.")
         return None, None, None, None, pd.DataFrame()
-
-    mcol = get_best_match_column(df, ["모델명", "모델", "Model"])
-    qcol = get_best_match_column(df, ["토출량", "유량"])
-    hcol = get_best_match_column(df, ["토출양정", "전양정"])
+    mcol = get_best_match_column(df, ["모델명","모델","Model"])
+    qcol = get_best_match_column(df, ["토출량","유량"])
+    hcol = get_best_match_column(df, ["토출양정","전양정"])
     kcol = get_best_match_column(df, ["축동력"])
-
     if not mcol or not qcol or not hcol:
         st.error(f"{sheet_name}: 필수 컬럼(Model/토출량/토출양정) 누락")
         return None, None, None, None, pd.DataFrame()
-
     df['Series'] = df[mcol].astype(str).str.extract(r"(XRF\d+)")
     df['Series'] = pd.Categorical(df['Series'], categories=SERIES_ORDER, ordered=True)
     df = df.sort_values('Series')
-
     return mcol, qcol, hcol, kcol, df
 
-# 필터 UI: 시리즈별/모델별
-# returns filtered df and list of models
+# 필터 UI: 기본값 빈 상태
 def render_filters(df, mcol, key_prefix):
-    mode = st.radio("분류 기준", ["시리즈별", "모델별"], key=key_prefix+"_mode")
+    mode = st.radio("분류 기준", ["시리즈별","모델별"], key=key_prefix+"_mode")
     if mode == "시리즈별":
         opts = df['Series'].dropna().unique().tolist()
-        sel = st.multiselect("시리즈 선택", opts, default=opts, key=key_prefix+"_series")
-        df_f = df[df['Series'].isin(sel)]
+        sel = st.multiselect("시리즈 선택", opts, default=[], key=key_prefix+"_series")
+        df_f = df[df['Series'].isin(sel)] if sel else pd.DataFrame()
     else:
         opts = df[mcol].dropna().unique().tolist()
-        keyword = st.text_input("모델 검색", key=key_prefix+"_search")
-        filt = [m for m in opts if keyword.lower() in m.lower()] if keyword else opts
-        sel = st.multiselect("모델 선택", filt, default=filt, key=key_prefix+"_models")
-        df_f = df[df[mcol].isin(sel)]
+        sel = st.multiselect("모델 선택", opts, default=[], key=key_prefix+"_models")
+        df_f = df[df[mcol].isin(sel)] if sel else pd.DataFrame()
     models = df_f[mcol].dropna().unique().tolist()
     return df_f, models
 
-# 곡선/점 그리기 함수
-# style: {'mode':'lines+markers','line':{...},'marker':{...}}
-def plot_curve(df, mcol, xcol, ycol, models, style, hline=None, vline=None):
-    fig = go.Figure()
+# 곡선/점 추가
+def add_traces(fig, df, mcol, xcol, ycol, models, mode, line_style=None, marker_style=None):
     for m in models:
-        sub = df[df[mcol] == m].sort_values(xcol)
+        sub = df[df[mcol]==m].sort_values(xcol)
         fig.add_trace(go.Scatter(
             x=sub[xcol], y=sub[ycol],
-            mode=style.get('mode','lines+markers'),
+            mode=mode,
             name=m,
-            line=style.get('line', {}),
-            marker=style.get('marker', {})
+            line=line_style or {},
+            marker=marker_style or {}
         ))
+
+# 보조선 추가
+def add_guides(fig, hline, vline):
     if hline is not None:
         fig.add_shape(type="line", xref="paper", x0=0, x1=1, yref="y", y0=hline, y1=hline,
                       line=dict(color="red", dash="dash"))
     if vline is not None:
         fig.add_shape(type="line", xref="x", x0=vline, x1=vline, yref="paper", y0=0, y1=1,
                       line=dict(color="blue", dash="dash"))
-    fig.update_layout(xaxis_title=xcol, yaxis_title=ycol, height=600, hovermode='closest')
-    return fig
 
 if uploaded_file:
-    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation"])
+    tabs = st.tabs(["Total","Reference","Catalog","Deviation"])
 
-    # === Total 탭 ===
+    # Total 탭
     with tabs[0]:
-        st.subheader("📊 Total - Q-H / Q-kW 통합 분석")
-        show_ref = st.checkbox("Reference 데이터", value=True)
-        show_cat = st.checkbox("Catalog 데이터", value=False)
-        show_dev = st.checkbox("Deviation 데이터", value=False)
-
-        # 각 시트 로드
-        mcol_r, qcol_r, hcol_r, kcol_r, df_r = load_sheet("reference data")
-        mcol_c, qcol_c, hcol_c, kcol_c, df_c = load_sheet("catalog data")
-        mcol_d, qcol_d, hcol_d, kcol_d, df_d = load_sheet("deviation data")
-
-        # 필터는 reference 기준으로
-        df_f, models = render_filters(df_r, mcol_r, "total")
-
-        # 보조선 입력
-        col1, col2 = st.columns(2)
+        st.subheader("📊 Total - Q-H & Q-kW 통합 분석")
+        show_ref = st.checkbox("Reference", value=True)
+        show_cat = st.checkbox("Catalog", value=True)
+        show_dev = st.checkbox("Deviation", value=True)
+        # 로드
+        m_r,q_r,h_r,k_r,df_r = load_sheet("reference data")
+        m_c,q_c,h_c,k_c,df_c = load_sheet("catalog data")
+        m_d,q_d,h_d,k_d,df_d = load_sheet("deviation data")
+        # 필터
+        df_f, models = render_filters(df_r, m_r, "total")
+        # 보조선
+        col1,col2 = st.columns(2)
         with col1:
-            h_h = st.number_input("Q-H 수평 보조선", key="total_hh")
-            v_h = st.number_input("Q-H 수직 보조선", key="total_vh")
+            hh = st.number_input("Q-H 수평선", key="total_hh")
+            vh = st.number_input("Q-H 수직선", key="total_vh")
         with col2:
-            h_k = st.number_input("Q-kW 수평 보조선", key="total_hk")
-            v_k = st.number_input("Q-kW 수직 보조선", key="total_vk")
-
+            hk = st.number_input("Q-kW 수평선", key="total_hk")
+            vk = st.number_input("Q-kW 수직선", key="total_vk")
         # Q-H
         st.markdown("#### Q-H (토출량-토출양정)")
         fig_h = go.Figure()
-        if show_ref:
-            fig_h = plot_curve(df_r[df_r[mcol_r].isin(models)], mcol_r, qcol_r, hcol_r, models,
-                               {'mode':'lines+markers'}, hline=h_h, vline=v_h)
-        if show_cat:
-            fig_h = plot_curve(df_c[df_c[mcol_c].isin(models)], mcol_c, qcol_c, hcol_c, models,
-                               {'mode':'lines+markers','line':{'dash':'dot'}}, hline=h_h, vline=v_h)
-        if show_dev:
-            fig_h = plot_curve(df_d[df_d[mcol_d].isin(models)], mcol_d, qcol_d, hcol_d, models,
-                               {'mode':'markers'}, hline=h_h, vline=v_h)
+        if show_ref: add_traces(fig_h, df_r, m_r, q_r, h_r, models, mode='lines+markers')
+        if show_cat: add_traces(fig_h, df_c, m_c, q_c, h_c, models, mode='lines+markers', line_style=dict(dash='dot'))
+        if show_dev: add_traces(fig_h, df_d, m_d, q_d, h_d, models, mode='markers')
+        add_guides(fig_h, hh, vh)
         st.plotly_chart(fig_h, use_container_width=True)
-
         # Q-kW
         st.markdown("#### Q-kW (토출량-축동력)")
         fig_k = go.Figure()
-        if show_ref and kcol_r:
-            fig_k = plot_curve(df_r[df_r[mcol_r].isin(models)], mcol_r, qcol_r, kcol_r, models,
-                               {'mode':'lines+markers'}, hline=h_k, vline=v_k)
-        if show_cat and kcol_c:
-            fig_k = plot_curve(df_c[df_c[mcol_c].isin(models)], mcol_c, qcol_c, kcol_c, models,
-                               {'mode':'lines+markers','line':{'dash':'dot'}}, hline=h_k, vline=v_k)
-        if show_dev and kcol_d:
-            fig_k = plot_curve(df_d[df_d[mcol_d].isin(models)], mcol_d, qcol_d, kcol_d, models,
-                               {'mode':'markers'}, hline=h_k, vline=v_k)
+        if show_ref and k_r: add_traces(fig_k, df_r, m_r, q_r, k_r, models, mode='lines+markers')
+        if show_cat and k_c: add_traces(fig_k, df_c, m_c, q_c, k_c, models, mode='lines+markers', line_style=dict(dash='dot'))
+        if show_dev and k_d: add_traces(fig_k, df_d, m_d, q_d, k_d, models, mode='markers')
+        add_guides(fig_k, hk, vk)
         st.plotly_chart(fig_k, use_container_width=True)
 
-    # === 개별 탭 ===
-    for idx, sheet in enumerate(["reference data","catalog data","deviation data"]):
+    # 개별 탭
+    for idx,sheet in enumerate(["reference data","catalog data","deviation data"]):
         with tabs[idx+1]:
             st.subheader(sheet.title())
-            mcol, qcol, hcol, kcol, df = load_sheet(sheet)
-            if df.empty:
-                continue
+            mcol,qcol,hcol,kcol,df = load_sheet(sheet)
             df_f, models = render_filters(df, mcol, sheet)
-
+            if not models:
+                st.info("모델을 선택해주세요.")
+                continue
             # Q-H
             st.markdown("#### Q-H (토출량-토출양정)")
-            style = {'mode':'markers'} if sheet == 'deviation data' else {'mode':'lines+markers'}
-            if sheet == 'catalog data': style['line'] = {'dash':'dot'}
-            fig1 = plot_curve(df_f, mcol, qcol, hcol, models, style)
+            fig1=go.Figure()
+            mode1 = 'markers' if sheet=='deviation data' else 'lines+markers'
+            style_line = dict(dash='dot') if sheet=='catalog data' else None
+            add_traces(fig1, df_f, mcol, qcol, hcol, models, mode=mode1, line_style=style_line)
             st.plotly_chart(fig1, use_container_width=True)
-
             # Q-kW
             if kcol:
                 st.markdown("#### Q-kW (토출량-축동력)")
-                fig2 = plot_curve(df_f, mcol, qcol, kcol, models, style)
+                fig2=go.Figure()
+                add_traces(fig2, df_f, mcol, qcol, kcol, models, mode=mode1, line_style=style_line)
                 st.plotly_chart(fig2, use_container_width=True)
-
-            # 데이터 테이블
+            # 테이블
             st.markdown("#### 데이터 확인")
             st.dataframe(df_f, use_container_width=True, height=300)
