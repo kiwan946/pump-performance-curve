@@ -81,14 +81,11 @@ if uploaded_file:
     # Total 탭
     with tabs[0]:
         st.subheader("📊 Total - Q-H & Q-kW 통합 분석")
-        show_ref = st.checkbox("Reference", value=True)
-        show_cat = st.checkbox("Catalog", value=True)
-        show_dev = st.checkbox("Deviation", value=True)
         # 로드
         m_r,q_r,h_r,k_r,df_r = load_sheet("reference data")
         m_c,q_c,h_c,k_c,df_c = load_sheet("catalog data")
         m_d,q_d,h_d,k_d,df_d = load_sheet("deviation data")
-        # 필터
+        # 필터 (reference 기준)
         df_f, models = render_filters(df_r, m_r, "total")
         # 보조선
         col1,col2 = st.columns(2)
@@ -101,17 +98,17 @@ if uploaded_file:
         # Q-H
         st.markdown("#### Q-H (토출량-토출양정)")
         fig_h = go.Figure()
-        if show_ref: add_traces(fig_h, df_r, m_r, q_r, h_r, models, mode='lines+markers')
-        if show_cat: add_traces(fig_h, df_c, m_c, q_c, h_c, models, mode='lines+markers', line_style=dict(dash='dot'))
-        if show_dev: add_traces(fig_h, df_d, m_d, q_d, h_d, models, mode='markers')
+        add_traces(fig_h, df_r, m_r, q_r, h_r, models, mode='lines+markers')
+        add_traces(fig_h, df_c, m_c, q_c, h_c, models, mode='lines+markers', line_style=dict(dash='dot'))
+        add_traces(fig_h, df_d, m_d, q_d, h_d, models, mode='markers')
         add_guides(fig_h, hh, vh)
         st.plotly_chart(fig_h, use_container_width=True)
         # Q-kW
         st.markdown("#### Q-kW (토출량-축동력)")
         fig_k = go.Figure()
-        if show_ref and k_r: add_traces(fig_k, df_r, m_r, q_r, k_r, models, mode='lines+markers')
-        if show_cat and k_c: add_traces(fig_k, df_c, m_c, q_c, k_c, models, mode='lines+markers', line_style=dict(dash='dot'))
-        if show_dev and k_d: add_traces(fig_k, df_d, m_d, q_d, k_d, models, mode='markers')
+        if k_r: add_traces(fig_k, df_r, m_r, q_r, k_r, models, mode='lines+markers')
+        if k_c: add_traces(fig_k, df_c, m_c, q_c, k_c, models, mode='lines+markers', line_style=dict(dash='dot'))
+        if k_d: add_traces(fig_k, df_d, m_d, q_d, k_d, models, mode='markers')
         add_guides(fig_k, hk, vk)
         st.plotly_chart(fig_k, use_container_width=True)
 
