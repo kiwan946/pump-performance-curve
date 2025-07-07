@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objs as go
 import numpy as np
-import uuid
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
@@ -67,11 +66,11 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
 
         df['Series'] = df[model_col].astype(str).str.extract(r"(XR[\w\-]+)")
 
-        unique_id = str(uuid.uuid4())
+        unique_id = sheet_name.replace(" ", "_")
         col1, col2 = st.columns([1, 3])
         with col1:
             series_options = df['Series'].dropna().unique().tolist()
-            selected_series = st.multiselect(f"{sheet_name} - 시리즈 선택 (다중 선택 가능)", series_options, key=f"{sheet_name}_series_{unique_id}")
+            selected_series = st.multiselect(f"{sheet_name} - 시리즈 선택 (다중 선택 가능)", series_options, key=f"{unique_id}_series")
 
         if selected_series:
             model_options = df[df['Series'].isin(selected_series)][model_col].dropna().unique().tolist()
@@ -79,7 +78,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             model_options = []
 
         with col2:
-            selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models_{unique_id}")
+            selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{unique_id}_models")
 
         filtered_df = df[df[model_col].isin(selected_models)] if selected_models else pd.DataFrame()
     else:
