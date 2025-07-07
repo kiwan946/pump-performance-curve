@@ -46,13 +46,13 @@ def add_polynomial_fit(fig, model_df, x_col, y_col, model, degree=3):
         x=x_range.flatten(), y=y_pred, mode='lines',
         name=f"{model} 예측곡선", line=dict(dash='solid', color='gray')))
 
-def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False):
+def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=False, total_mode=False):
     df = None
     try:
-        df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+        df = pd.read_excel(uploaded_file, sheet_name="reference data")
     except:
-        if ai_mode:
-            st.warning("Reference 데이터를 불러올 수 없습니다. AI 분석을 실행할 수 없습니다.")
+        if ai_mode or total_mode:
+            st.warning("Reference 데이터를 불러올 수 없습니다.")
         return
 
     if df is not None:
@@ -77,7 +77,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
             model_options = []
 
         with col2:
-            if sheet_name == "reference data" and not ai_mode:
+            if sheet_name == "reference data" or total_mode:
                 selected_models = st.multiselect(f"{sheet_name} - 모델 선택 (다중 선택 가능)", model_options, key=f"{sheet_name}_models")
             else:
                 selected_models = [st.selectbox(f"{sheet_name} - 모델 선택", [""] + model_options, key=f"{sheet_name}_model")]
@@ -92,7 +92,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
         st.markdown("#### Q-H (토출양정) 성능곡선")
         fig1 = plot_lines(filtered_df, model_col, x_col, y_col, selected_models, source=sheet_name.title())
 
-        if sheet_name == "reference data" and not ai_mode:
+        if total_mode:
             for sheet, label, dash_style in zip([
                 "catalog data", "deviation data"
             ], ["Catalog", "Deviation"], ["dash", "dot"]):
@@ -109,11 +109,7 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
                     except:
                         st.warning(f"{label} 데이터를 불러오지 못했습니다.")
 
-            for model in selected_models:
-                model_df = filtered_df[filtered_df[model_col] == model]
-                add_polynomial_fit(fig1, model_df, x_col, y_col, model)
-
-        if ai_mode:
+        if ai_mode or total_mode:
             for model in selected_models:
                 model_df = filtered_df[filtered_df[model_col] == model]
                 add_polynomial_fit(fig1, model_df, x_col, y_col, model)
@@ -129,24 +125,25 @@ def process_and_plot(sheet_name, point_only=False, catalog_style=False, ai_mode=
         st.dataframe(filtered_df, use_container_width=True, height=300)
 
 if uploaded_file:
-    tabs = st.tabs(["Reference", "Catalog", "Deviation", "AI 분석", "Total"])
+    tabs = st.tabs(["Total", "Reference", "Catalog", "Deviation", "AI 분석"])
 
     with tabs[0]:
+        st.subheader("📊 Total - 통합 곡선 분석")
+        process_and_plot("reference data", total_mode=True)
+
+    with tabs[1]:
         st.subheader("📘 Reference Data")
         process_and_plot("reference data")
 
-    with tabs[1]:
+    with tabs[2]:
         st.subheader("📙 Catalog Data")
         process_and_plot("catalog data", catalog_style=True)
 
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("📕 Deviation Data")
         process_and_plot("deviation data", point_only=True)
 
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("🤖 AI 성능 예측")
         process_and_plot("reference data", ai_mode=True)
 
-    with tabs[4]:
-        st.subheader("📊 Total - 통합 곡선 분석")
-        process_and_plot("reference data")
